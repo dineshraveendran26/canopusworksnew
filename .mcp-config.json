@@ -1,0 +1,29 @@
+{
+  "mcpServers": {
+    "browser": {
+      "command": "npx",
+      "args": ["@agent-infra/mcp-server-browser"],
+      "env": {
+        "BROWSER_TYPE": "chrome",
+        "HEADLESS": "false",
+        "BROWSER_ARGS": "--no-sandbox --disable-dev-shm-usage"
+      }
+    },
+    "supabase": {
+      "command": "npx",
+      "args": ["@supabase/mcp-server-supabase"],
+      "env": {
+        "SUPABASE_ACCESS_TOKEN": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImljZGFucXpjZXV6eGVycXl0dGp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYxMjc1NTQsImV4cCI6MjA3MTcwMzU1NH0.ld4ZxIoJJ6e8RJV5KwZvfzq0w9Jd_-ygc9tpj4zPYIM",
+        "SUPABASE_URL": "https://icdanqzceuzxerqyttjw.supabase.co",
+        "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImljZGFucXpjZXV6eGVycXl0dGp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYxMjc1NTQsImV4cCI6MjA3MTcwMzU1NH0.ld4ZxIoJJ6e8RJV5KwZvfzq0w9Jd_-ygc9tpj4zPYIM"
+      }
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["@modelcontextprotocol/server-filesystem"],
+      "env": {
+        "MCP_SERVER_FILESYSTEM_ROOT": "."
+      }
+    }
+  }
+} 
