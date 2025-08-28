@@ -30,7 +30,6 @@ interface SubtaskComment {
 interface Subtask {
   id: string
   title: string
-  description?: string
   completed: boolean
   assignees?: string[]
   comments: SubtaskComment[]
@@ -58,7 +57,6 @@ export function SubtaskList({ subtasks, onSubtasksChange, onCommentClick, select
   const [isCreatingSubtask, setIsCreatingSubtask] = useState(false)
   const [newSubtaskData, setNewSubtaskData] = useState({
     title: "",
-    description: "",
     startDate: undefined as Date | undefined,
     endDate: undefined as Date | undefined,
     assignees: [] as string[],
@@ -78,7 +76,6 @@ export function SubtaskList({ subtasks, onSubtasksChange, onCommentClick, select
     setIsCreatingSubtask(true)
     setNewSubtaskData({
       title: "",
-      description: "",
       startDate: undefined,
       endDate: undefined,
       assignees: [],
@@ -90,7 +87,6 @@ export function SubtaskList({ subtasks, onSubtasksChange, onCommentClick, select
     setIsCreatingSubtask(false)
     setNewSubtaskData({
       title: "",
-      description: "",
       startDate: undefined,
       endDate: undefined,
       assignees: [],
@@ -103,7 +99,6 @@ export function SubtaskList({ subtasks, onSubtasksChange, onCommentClick, select
       const newSubtask: Subtask = {
         id: Date.now().toString(),
         title: newSubtaskData.title.trim(),
-        description: newSubtaskData.description.trim() || undefined,
         completed: false,
         assignees: newSubtaskData.assignees,
         comments: newSubtaskData.comments,
@@ -464,7 +459,7 @@ export function SubtaskList({ subtasks, onSubtasksChange, onCommentClick, select
           </div>
         ) : (
           <div className="space-y-4 p-4 border-[--border] rounded-lg bg-muted/20">
-            {/* Title and Description */}
+            {/* Title */}
             <div className="space-y-3">
               <Input
                 id="new-subtask-title"
@@ -479,16 +474,6 @@ export function SubtaskList({ subtasks, onSubtasksChange, onCommentClick, select
                     addSubtask()
                   }
                 }}
-              />
-              
-              <Textarea
-                id="new-subtask-description"
-                name="new-subtask-description"
-                value={newSubtaskData.description}
-                onChange={(e) => setNewSubtaskData(prev => ({ ...prev, description: e.target.value }))}
-                placeholder="Enter subtask description (optional)..."
-                rows={2}
-                className="resize-none"
               />
             </div>
 
