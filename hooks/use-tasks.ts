@@ -411,26 +411,81 @@ export function useTasks() {
       if (data && data.length > 0) {
         console.log('🔄 Fetching subtasks and assignments for all tasks...')
         
-        // Fetch all subtasks first
-        for (const task of data) {
-          await fetchSubtasks(task.id)
-        }
-        
-        // Now convert tasks to UI format with subtasks available
-        const uiTasks = (data || []).map(convertSupabaseToUITask)
-        console.log('🔄 Fetched tasks from database:', uiTasks.length, 'tasks')
-        console.log('🔄 Task IDs:', uiTasks.map(t => t.id))
-        
-        // Set tasks with subtasks included
-        setTasks(uiTasks)
-        
-        // Then fetch and update assignments
-        for (const task of data) {
-          const assigneeIds = await fetchTaskAssignments(task.id)
-          // Update the task with its assignees
-          setTasks(prev => prev.map((t: Task) => 
-            t.id === task.id ? { ...t, assignees: assigneeIds } : t
-          ))
+        // Batch fetch all subtasks for all tasks in one query
+        const taskIds = data.map((task: any) => task.id)
+        const { data: allSubtasksData, error: subtasksError } = await supabase
+          .from('subtasks')
+          .select('*')
+          .in('task_id', taskIds)
+          .order('order_index', { ascending: true })
+
+        if (subtasksError) {
+          console.error('Error fetching all subtasks:', subtasksError)
+        } else {
+          console.log('✅ Fetched all subtasks:', allSubtasksData?.length || 0)
+          
+          // Batch fetch all subtask assignments in one query
+          const subtaskIds = allSubtasksData?.map((st: any) => st.id) || []
+          let allSubtaskAssignments: any[] = []
+          
+          if (subtaskIds.length > 0) {
+            const { data: assignmentsData, error: assignmentsError } = await supabase
+              .from('subtask_assignments')
+              .select('subtask_id, team_member_id')
+              .in('subtask_id', subtaskIds)
+            
+            if (!assignmentsError && assignmentsData) {
+              allSubtaskAssignments = assignmentsData
+              console.log('✅ Fetched all subtask assignments:', assignmentsData.length)
+            }
+          }
+          
+          // Process all subtasks with their assignees
+          const processedSubtasks = (allSubtasksData || []).map((subtask: any) => {
+            const subtaskAssignments = allSubtaskAssignments.filter(
+              (assignment: any) => assignment.subtask_id === subtask.id
+            )
+            
+            return {
+              ...subtask,
+              startDate: subtask.start_date ? new Date(subtask.start_date) : undefined,
+              endDate: subtask.end_date ? new Date(subtask.end_date) : undefined,
+              assignees: subtaskAssignments.map((a: any) => a.team_member_id) || []
+            }
+          })
+          
+          // Set all subtasks at once
+          setSubtasks(processedSubtasks)
+          
+          // Batch fetch all task assignments in one query
+          const { data: allTaskAssignments, error: taskAssignmentsError } = await supabase
+            .from('task_assignments')
+            .select('task_id, team_member_id')
+            .in('task_id', taskIds)
+          
+          if (taskAssignmentsError) {
+            console.error('Error fetching all task assignments:', taskAssignmentsError)
+          } else {
+            console.log('✅ Fetched all task assignments:', allTaskAssignments?.length || 0)
+          }
+          
+          // Now convert tasks to UI format with all data available
+          const uiTasks = (data || []).map((task: any) => {
+            const taskSubtasks = processedSubtasks?.filter((st: any) => st.task_id === task.id) || []
+            const taskAssignees = allTaskAssignments?.filter((ta: any) => ta.task_id === task.id).map((ta: any) => ta.team_member_id) || []
+            
+            return convertSupabaseToUITask({
+              ...task,
+              subtasks: taskSubtasks,
+              assignees: taskAssignees
+            })
+          })
+          
+          console.log('🔄 Fetched tasks from database:', uiTasks.length, 'tasks')
+          console.log('🔄 Task IDs:', uiTasks.map((t: any) => t.id))
+          
+          // Set all tasks at once with complete data
+          setTasks(uiTasks)
         }
       } else {
         // No tasks, just set empty array
