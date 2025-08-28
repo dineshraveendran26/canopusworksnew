@@ -94,10 +94,11 @@ export function SubtaskList({ subtasks, onSubtasksChange, onCommentClick, select
     })
   }
 
-  const addSubtask = () => {
+  const addSubtask = async () => {
     if (newSubtaskData.title.trim()) {
-      const newSubtask: Subtask = {
-        id: Date.now().toString(),
+      // Create a temporary subtask for immediate UI feedback
+      const tempSubtask: Subtask = {
+        id: `temp-${Date.now()}`, // Temporary ID
         title: newSubtaskData.title.trim(),
         completed: false,
         assignees: newSubtaskData.assignees,
@@ -105,8 +106,14 @@ export function SubtaskList({ subtasks, onSubtasksChange, onCommentClick, select
         startDate: newSubtaskData.startDate,
         endDate: newSubtaskData.endDate,
       }
-      onSubtasksChange([...safeSubtasks, newSubtask])
+      
+      // Add to local state immediately for UI responsiveness
+      onSubtasksChange([...safeSubtasks, tempSubtask])
       cancelCreatingSubtask()
+      
+      // Note: The actual subtask will be saved to the database when the task is saved
+      // This provides immediate UI feedback while ensuring data persistence
+      console.log('🔄 Subtask added to local state, will be saved when task is saved')
     }
   }
 

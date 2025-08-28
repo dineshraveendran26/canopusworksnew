@@ -71,9 +71,10 @@ export interface Subtask {
   id: string
   task_id: string
   title: string
-  description?: string
   completed: boolean
   order_index: number
+  startDate?: Date
+  endDate?: Date
   document_links?: string[] // For attachments
   completed_at?: string
   created_at: string
@@ -112,9 +113,11 @@ export interface CreateTaskWithAssigneesData extends Omit<CreateTaskData, 'assig
 export interface CreateSubtaskData {
   task_id: string
   title: string
-  description?: string
   order_index: number
-  estimated_hours?: number
+  start_date?: string | null
+  end_date?: string | null
+  completed?: boolean
+  created_by?: string
 }
 
 export interface CreateCommentData {
@@ -163,6 +166,8 @@ export function useTasks() {
       assignees: [], // Will be populated separately via fetchTaskAssignments
       subtasks: taskSubtasks.map((subtask: Subtask) => ({
         ...subtask,
+        startDate: subtask.startDate || undefined,
+        endDate: subtask.endDate || undefined,
         assignees: subtask.assignees || [] // Ensure assignees array exists
       })), // Include actual subtasks with assignees
       comments: [], // Will be populated separately
@@ -313,12 +318,55 @@ export function useTasks() {
         }
       }
       
+      // Now handle subtasks if they exist
+      if (uiTask.subtasks && uiTask.subtasks.length > 0) {
+        console.log('🔄 Creating subtasks for task:', uiTask.subtasks.length, 'subtasks')
+        
+        try {
+          const subtaskPromises = uiTask.subtasks.map(async (subtask, index) => {
+            const subtaskData: CreateSubtaskData = {
+              task_id: newTask.id,
+              title: subtask.title,
+              order_index: index,
+              start_date: subtask.startDate ? subtask.startDate.toISOString().split('T')[0] : null,
+              end_date: subtask.endDate ? subtask.endDate.toISOString().split('T')[0] : null,
+              completed: subtask.completed || false,
+              created_by: user.id
+            }
+            
+            console.log('🔄 Creating subtask:', subtaskData)
+            
+            const { data: newSubtask, error: subtaskError } = await supabase
+              .from('subtasks')
+              .insert(subtaskData)
+              .select()
+              .single()
+            
+            if (subtaskError) {
+              console.error('❌ Error creating subtask:', subtaskError)
+              throw subtaskError
+            }
+            
+            console.log('✅ Subtask created:', newSubtask)
+            return newSubtask
+          })
+          
+          await Promise.all(subtaskPromises)
+          console.log('✅ All subtasks created successfully')
+          
+        } catch (subtaskError) {
+          console.error('❌ Error creating subtasks:', subtaskError)
+          // Don't fail the entire operation, just log the error
+          console.warn('⚠️ Task created but subtask creation failed')
+        }
+      }
+      
       // Convert back to UI format and add to state
       const uiTaskData = convertSupabaseToUITask(newTask)
       // Note: Task will be added to state via real-time subscription to prevent duplicates
       // setTasks(prev => [uiTaskData, ...prev]) // Removed to prevent duplicates
       
-      console.log('✅ Task created successfully with assignees')
+      console.log('✅ Task created successfully with assignees and subtasks')
       return uiTaskData
       
     } catch (error) {
@@ -417,7 +465,9 @@ export function useTasks() {
 
           return {
             ...subtask,
-            assignees: assigneesData?.map(a => a.team_member_id) || [] // Changed from user_id
+            startDate: subtask.start_date ? new Date(subtask.start_date) : undefined,
+            endDate: subtask.end_date ? new Date(subtask.end_date) : undefined,
+            assignees: assigneesData?.map((a: { team_member_id: string }) => a.team_member_id) || []
           }
         })
       )
@@ -981,10 +1031,22 @@ export function useTasks() {
             // Check if subtask already exists to prevent duplicates
             const existingSubtask = subtasks.find(subtask => subtask.id === payload.new.id)
             if (!existingSubtask) {
-              setSubtasks(prev => [...prev, payload.new as Subtask])
+              const newSubtask = {
+                ...payload.new,
+                startDate: payload.new.start_date ? new Date(payload.new.start_date) : undefined,
+                endDate: payload.new.end_date ? new Date(payload.new.end_date) : undefined,
+                assignees: [] // Will be populated separately
+              } as Subtask
+              setSubtasks(prev => [...prev, newSubtask])
             }
           } else if (payload.eventType === 'UPDATE') {
-            setSubtasks(prev => prev.map(subtask => subtask.id === payload.new.id ? payload.new as Subtask : subtask))
+            const updatedSubtask = {
+              ...payload.new,
+              startDate: payload.new.start_date ? new Date(payload.new.start_date) : undefined,
+              endDate: payload.new.end_date ? new Date(payload.new.end_date) : undefined,
+              assignees: [] // Will be populated separately
+            } as Subtask
+            setSubtasks(prev => prev.map(subtask => subtask.id === payload.new.id ? updatedSubtask : subtask))
           } else if (payload.eventType === 'DELETE') {
             setSubtasks(prev => prev.filter(subtask => subtask.id !== payload.old.id))
           }
