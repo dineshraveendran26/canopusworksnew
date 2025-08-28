@@ -30,6 +30,7 @@ interface SubtaskComment {
 interface Subtask {
   id: string
   title: string
+  description?: string
   completed: boolean
   assignees?: string[]
   comments: SubtaskComment[]
@@ -48,12 +49,23 @@ export function SubtaskList({ subtasks, onSubtasksChange, onCommentClick, select
   const safeSubtasks = Array.isArray(subtasks) ? subtasks : []
   const { teamMembers, loading: teamMembersLoading } = useTeamMembers()
   const { 
-    getEffectiveSubtaskAssignees, 
-    assignUsersToSubtask, 
+    getSubtaskAssignments, 
+    assignTeamMembersToSubtask, 
     loading: assignmentLoading 
   } = useSubtaskAssignments()
 
-  const [newSubtaskTitle, setNewSubtaskTitle] = useState("")
+  // New subtask creation state
+  const [isCreatingSubtask, setIsCreatingSubtask] = useState(false)
+  const [newSubtaskData, setNewSubtaskData] = useState({
+    title: "",
+    description: "",
+    startDate: undefined as Date | undefined,
+    endDate: undefined as Date | undefined,
+    assignees: [] as string[],
+    comments: [] as SubtaskComment[]
+  })
+  
+  // Existing subtask state
   const [assigneeDropdown, setAssigneeDropdown] = useState<string | null>(null)
   const [datePickerOpen, setDatePickerOpen] = useState<{ subtaskId: string; type: "start" | "end" } | null>(null)
   const [assigneeSearchTerm, setAssigneeSearchTerm] = useState("")
@@ -61,19 +73,45 @@ export function SubtaskList({ subtasks, onSubtasksChange, onCommentClick, select
   const [newCommentText, setNewCommentText] = useState("")
   const [editingComment, setEditingComment] = useState<{ subtaskId: string; commentId: string; text: string } | null>(null)
 
+  // New subtask creation functions
+  const startCreatingSubtask = () => {
+    setIsCreatingSubtask(true)
+    setNewSubtaskData({
+      title: "",
+      description: "",
+      startDate: undefined,
+      endDate: undefined,
+      assignees: [],
+      comments: []
+    })
+  }
+
+  const cancelCreatingSubtask = () => {
+    setIsCreatingSubtask(false)
+    setNewSubtaskData({
+      title: "",
+      description: "",
+      startDate: undefined,
+      endDate: undefined,
+      assignees: [],
+      comments: []
+    })
+  }
+
   const addSubtask = () => {
-    if (newSubtaskTitle.trim()) {
+    if (newSubtaskData.title.trim()) {
       const newSubtask: Subtask = {
         id: Date.now().toString(),
-        title: newSubtaskTitle.trim(),
+        title: newSubtaskData.title.trim(),
+        description: newSubtaskData.description.trim() || undefined,
         completed: false,
-        assignees: [],
-        comments: [],
-        startDate: undefined,
-        endDate: undefined,
+        assignees: newSubtaskData.assignees,
+        comments: newSubtaskData.comments,
+        startDate: newSubtaskData.startDate,
+        endDate: newSubtaskData.endDate,
       }
       onSubtasksChange([...safeSubtasks, newSubtask])
-      setNewSubtaskTitle("")
+      cancelCreatingSubtask()
     }
   }
 
@@ -98,13 +136,23 @@ export function SubtaskList({ subtasks, onSubtasksChange, onCommentClick, select
       
       // Update backend assignments
       try {
-        await assignUsersToSubtask(subtaskId, newAssignees)
+        await assignTeamMembersToSubtask(subtaskId, newAssignees)
       } catch (error) {
         console.error('Failed to update subtask assignments:', error)
         // Revert local state on error
         updateSubtask(subtaskId, { assignees: currentAssignees })
       }
     }
+  }
+
+  // New subtask assignee management
+  const toggleNewSubtaskAssignee = (memberId: string) => {
+    setNewSubtaskData(prev => ({
+      ...prev,
+      assignees: prev.assignees.includes(memberId)
+        ? prev.assignees.filter(id => id !== memberId)
+        : [...prev.assignees, memberId]
+    }))
   }
 
   const handleCommentClick = (subtaskId: string) => {
@@ -391,31 +439,216 @@ export function SubtaskList({ subtasks, onSubtasksChange, onCommentClick, select
         ))}
       </div>
 
+      {/* Enhanced Add New Subtask Section */}
       <div className="space-y-3">
         <h3 className="text-sm font-medium text-foreground">Add a new subtask</h3>
-        <div className="flex gap-2">
-          <Input
-            id="new-subtask-title"
-            name="new-subtask-title"
-            value={newSubtaskTitle}
-            onChange={(e) => setNewSubtaskTitle(e.target.value)}
-            placeholder="Add a new subtask"
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault()
-                e.stopPropagation()
-                addSubtask()
-              }
-            }}
-            className="flex-1"
-          />
-          <Button type="button" onClick={addSubtask} size="sm" className="bg-blue-600 hover:bg-blue-700">
-            Add
-          </Button>
-        </div>
+        
+        {!isCreatingSubtask ? (
+          <div className="flex gap-2">
+            <Input
+              id="new-subtask-title"
+              name="new-subtask-title"
+              placeholder="Add a new subtask"
+              onClick={startCreatingSubtask}
+              className="flex-1 cursor-pointer"
+              readOnly
+            />
+            <Button 
+              type="button" 
+              onClick={startCreatingSubtask} 
+              size="sm" 
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              <Plus className="w-4 h-4" />
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-4 p-4 border-[--border] rounded-lg bg-muted/20">
+            {/* Title and Description */}
+            <div className="space-y-3">
+              <Input
+                id="new-subtask-title"
+                name="new-subtask-title"
+                value={newSubtaskData.title}
+                onChange={(e) => setNewSubtaskData(prev => ({ ...prev, title: e.target.value }))}
+                placeholder="Enter subtask title..."
+                className="flex-1"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault()
+                    addSubtask()
+                  }
+                }}
+              />
+              
+              <Textarea
+                id="new-subtask-description"
+                name="new-subtask-description"
+                value={newSubtaskData.description}
+                onChange={(e) => setNewSubtaskData(prev => ({ ...prev, description: e.target.value }))}
+                placeholder="Enter subtask description (optional)..."
+                rows={2}
+                className="resize-none"
+              />
+            </div>
+
+            {/* Action Icons Row */}
+            <div className="flex items-center gap-2">
+              {/* Start Date */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-8 px-2 text-xs"
+                    disabled={!newSubtaskData.title.trim()}
+                  >
+                    <CalendarIcon className="w-3 h-3 mr-1" />
+                    {newSubtaskData.startDate ? format(newSubtaskData.startDate, "MMM dd") : "Start"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={newSubtaskData.startDate}
+                    onSelect={(date) => setNewSubtaskData(prev => ({ ...prev, startDate: date }))}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+
+              {/* End Date */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-8 px-2 text-xs"
+                    disabled={!newSubtaskData.title.trim()}
+                  >
+                    <CalendarIcon className="w-3 h-3 mr-1" />
+                    {newSubtaskData.endDate ? format(newSubtaskData.endDate, "MMM dd") : "End"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={newSubtaskData.endDate}
+                    onSelect={(date) => setNewSubtaskData(prev => ({ ...prev, endDate: date }))}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+
+              {/* Assignees */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-8"
+                    disabled={!newSubtaskData.title.trim()}
+                  >
+                    {newSubtaskData.assignees.length > 0 ? (
+                      <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
+                        <span className="text-xs font-medium">+{newSubtaskData.assignees.length}</span>
+                      </div>
+                    ) : (
+                      <Users className="w-3 h-3 text-muted-foreground" />
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 p-2">
+                  <div className="space-y-1">
+                    <div className="px-2 py-1.5 text-sm font-medium text-muted-foreground border-b">
+                      Select Team Members
+                    </div>
+                    
+                    <div className="max-h-64 overflow-y-auto">
+                      {teamMembers.map((member) => {
+                        const isSelected = newSubtaskData.assignees.includes(member.id)
+                        return (
+                          <button
+                            key={member.id}
+                            type="button"
+                            onClick={() => toggleNewSubtaskAssignee(member.id)}
+                            className={cn(
+                              "flex items-center gap-3 w-full p-2 rounded-md text-left text-sm transition-colors hover:bg-muted/50",
+                              isSelected ? "bg-primary/10 text-primary" : "text-foreground"
+                            )}
+                          >
+                            <Avatar className="w-6 h-6">
+                              <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                                {member.full_name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium truncate">{member.full_name}</div>
+                              <div className="text-xs text-muted-foreground truncate">{member.role}</div>
+                            </div>
+                            {isSelected && (
+                              <div className="w-4 h-4 rounded-full bg-primary flex items-center justify-center">
+                                <svg className="w-2.5 h-2.5 text-primary-foreground" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                </svg>
+                              </div>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+
+                    {/* Clear All Option */}
+                    {newSubtaskData.assignees.length > 0 && (
+                      <div className="border-t pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setNewSubtaskData(prev => ({ ...prev, assignees: [] }))}
+                          className="w-full p-2 text-sm text-destructive hover:bg-destructive/10 rounded-md transition-colors text-center"
+                        >
+                          Clear all assignees
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </PopoverContent>
+              </Popover>
+
+              {/* Comments Icon (shows count) */}
+              <div className="flex items-center gap-1 px-2 text-xs text-muted-foreground">
+                <MessageCircle className="w-3 h-3" />
+                {newSubtaskData.comments.length > 0 && (
+                  <span>{newSubtaskData.comments.length}</span>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-2 ml-auto">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={cancelCreatingSubtask}
+                  className="h-8 px-3"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={addSubtask}
+                  size="sm"
+                  disabled={!newSubtaskData.title.trim()}
+                  className="bg-blue-600 hover:bg-blue-700 h-8 px-3"
+                >
+                  Add Subtask
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {safeSubtasks.length === 0 && (
+      {safeSubtasks.length === 0 && !isCreatingSubtask && (
         <div className="text-center py-4 text-muted-foreground">
           <p className="text-sm">No subtasks yet. Add one above to get started.</p>
         </div>
