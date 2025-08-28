@@ -180,8 +180,8 @@ export function KanbanBoard() {
             </CardHeader>
             <CardContent className="pt-0">
                               <div className="space-y-2 sm:space-y-3">
-                  {column.tasks.map((task) => (
-                    <div key={task.id} className="transition-all duration-200 ease-in-out">
+                  {column.tasks.map((task, index) => (
+                    <div key={`${column.id}-${task.id}-${index}`} className="transition-all duration-200 ease-in-out">
                       {expandedColumns[column.id] ? (
                         expandedTasks[task.id] ? (
                           <div className="space-y-2">

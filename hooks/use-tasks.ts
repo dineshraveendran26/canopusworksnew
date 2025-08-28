@@ -361,6 +361,8 @@ export function useTasks() {
 
       // Convert Supabase tasks to UI format
       const uiTasks = (data || []).map(convertSupabaseToUITask)
+      console.log('🔄 Fetched tasks from database:', uiTasks.length, 'tasks')
+      console.log('🔄 Task IDs:', uiTasks.map(t => t.id))
       setTasks(uiTasks)
 
       // Fetch subtasks and assignments for all tasks
@@ -953,7 +955,10 @@ export function useTasks() {
             const existingTask = tasks.find(task => task.id === payload.new.id)
             if (!existingTask) {
               const newUITask = convertSupabaseToUITask(payload.new as SupabaseTask)
+              console.log('🔄 Adding new task via real-time:', newUITask.id, newUITask.title)
               setTasks(prev => [newUITask, ...prev])
+            } else {
+              console.log('⚠️ Duplicate task detected, skipping:', payload.new.id, payload.new.title)
             }
           } else if (payload.eventType === 'UPDATE') {
             const updatedUITask = convertSupabaseToUITask(payload.new as SupabaseTask)
@@ -1001,7 +1006,7 @@ export function useTasks() {
               setComments(prev => [...prev, payload.new as Comment])
             }
           } else if (payload.eventType === 'UPDATE') {
-            setComments(prev => prev.map(comment => comment.id === payload.new.id ? comment : comment))
+            setComments(prev => prev.map(comment => comment.id === payload.new.id ? payload.new as Comment : comment))
           } else if (payload.eventType === 'DELETE') {
             setComments(prev => prev.filter(comment => comment.id !== payload.old.id))
           }
