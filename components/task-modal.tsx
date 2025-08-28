@@ -77,7 +77,11 @@ export function TaskModal({ open, onOpenChange, task, mode = "create" }: TaskMod
   // Load current assignees when editing a task
   useEffect(() => {
     if (task && mode === "edit") {
-      setSelectedAssignees(task.assignees || [])
+      const assignees = task.assignees || []
+      // Ensure no duplicates
+      const uniqueAssignees = [...new Set(assignees)]
+      console.log('🔄 Loading assignees from task:', uniqueAssignees)
+      setSelectedAssignees(uniqueAssignees)
     }
   }, [task, mode])
 
@@ -112,6 +116,10 @@ export function TaskModal({ open, onOpenChange, task, mode = "create" }: TaskMod
     // Process attachments for database storage
     const documentLinks = attachments.map(att => att.link).filter(link => link.trim() !== '')
     
+    // Ensure assignees are unique
+    const uniqueAssignees = [...new Set(selectedAssignees)]
+    console.log('🔄 Final assignees (ensured unique):', uniqueAssignees)
+    
     const taskData = {
       title: formData.title.trim(),
       description: formData.description.trim(),
@@ -120,7 +128,7 @@ export function TaskModal({ open, onOpenChange, task, mode = "create" }: TaskMod
       startDate: formData.startDate?.toISOString().split("T")[0],
       dueDate: formData.dueDate?.toISOString().split("T")[0],
       department: formData.department,
-      assignees: selectedAssignees,
+      assignees: uniqueAssignees,
       subtasks,
       comments,
       attachments,
@@ -197,9 +205,20 @@ export function TaskModal({ open, onOpenChange, task, mode = "create" }: TaskMod
   }
 
   const toggleAssignee = (memberId: string) => {
-    setSelectedAssignees((prev) =>
-      prev.includes(memberId) ? prev.filter((id) => id !== memberId) : [...prev, memberId],
-    )
+    console.log('🔄 toggleAssignee called with:', memberId)
+    console.log('🔄 Current selectedAssignees:', selectedAssignees)
+    
+    setSelectedAssignees((prev) => {
+      const newAssignees = prev.includes(memberId) 
+        ? prev.filter((id) => id !== memberId) 
+        : [...prev, memberId]
+      
+      // Ensure no duplicates
+      const uniqueAssignees = [...new Set(newAssignees)]
+      
+      console.log('🔄 New selectedAssignees:', uniqueAssignees)
+      return uniqueAssignees
+    })
   }
 
   const handleDeleteTask = () => {
@@ -383,11 +402,11 @@ export function TaskModal({ open, onOpenChange, task, mode = "create" }: TaskMod
                   
                   {/* Current Assignees - Only Avatars */}
                   <div className="flex flex-wrap gap-2">
-                    {selectedAssignees.map((assigneeId) => {
+                    {[...new Set(selectedAssignees)].map((assigneeId, index) => {
                       const member = teamMembers.find((m) => m.id === assigneeId)
                       return member ? (
                         <button
-                          key={assigneeId}
+                          key={`${assigneeId}-${index}`}
                           type="button"
                           onClick={() => toggleAssignee(member.id)}
                           className="relative"
