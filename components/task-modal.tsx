@@ -43,7 +43,7 @@ interface TaskFormData {
 export function TaskModal({ open, onOpenChange, task, mode = "create" }: TaskModalProps) {
   console.log('🔄 TaskModal rendered with:', { open, mode, task })
   
-  const { addTask, createTaskWithAssignees, updateTask, deleteTask } = useTaskContext()
+  const { addTask, createTaskWithAssignees, updateTask, deleteTask, fetchSubtasks } = useTaskContext()
   console.log('🔄 TaskModal useTaskContext result:', { addTask: !!addTask, updateTask: !!updateTask, deleteTask: !!deleteTask })
   
   const { teamMembers, loading: teamMembersLoading } = useTeamMembers()
@@ -82,8 +82,27 @@ export function TaskModal({ open, onOpenChange, task, mode = "create" }: TaskMod
       const uniqueAssignees = [...new Set(assignees)]
       console.log('🔄 Loading assignees from task:', uniqueAssignees)
       setSelectedAssignees(uniqueAssignees)
+      
+      // Load subtasks and comments from the task
+      if (task.subtasks) {
+        console.log('🔄 Loading subtasks from task:', task.subtasks.length, 'subtasks')
+        setSubtasks(task.subtasks)
+      }
+      
+      if (task.comments) {
+        console.log('🔄 Loading comments from task:', task.comments.length, 'comments')
+        setComments(task.comments)
+      }
     }
   }, [task, mode])
+
+  // Refresh subtasks when modal opens in edit mode
+  useEffect(() => {
+    if (open && task && mode === "edit" && fetchSubtasks) {
+      console.log('🔄 Modal opened, refreshing subtasks for task:', task.id)
+      fetchSubtasks(task.id)
+    }
+  }, [open, task, mode, fetchSubtasks])
 
   const handleSubmit = async (e: React.FormEvent) => {
     console.log('🔄 handleSubmit START - Event:', e)
@@ -346,6 +365,7 @@ export function TaskModal({ open, onOpenChange, task, mode = "create" }: TaskMod
                 <div className="space-y-2 sm:space-y-3">
                   <SubtaskList
                     subtasks={subtasks}
+                    taskId={task?.id || 'temp-task-id'} // Pass task ID or temporary ID for new tasks
                     onSubtasksChange={setSubtasks}
                     onCommentClick={handleSubtaskCommentClick}
                     selectedCommentSubtask={null} // No longer needed

@@ -17,6 +17,8 @@ interface TaskContextType {
   updateTask: (id: string, updates: Partial<Task>) => Promise<Task | null>
   deleteTask: (id: string) => void
   getTasksByStatus: (status: string) => Task[]
+  fetchSubtasks: (taskId: string) => Promise<void>
+  addSubtask: (subtaskData: any) => Promise<any>
   setFilter: (filter: FilterType) => void
   setSearchQuery: (query: string) => void
   getFilteredTasks: () => Task[]
@@ -39,6 +41,8 @@ export function TaskProvider({ children }: { children: ReactNode }) {
     updateTask: supabaseUpdateTask,
     deleteTask: supabaseDeleteTask,
     getTasksByStatus,
+    fetchSubtasks: supabaseFetchSubtasks,
+    addSubtask: supabaseAddSubtask,
   } = useTasks()
   
   console.log('🔄 TaskProvider - useTasks result:', {
@@ -174,6 +178,8 @@ export function TaskProvider({ children }: { children: ReactNode }) {
         updateTask,
         deleteTask,
         getTasksByStatus,
+        fetchSubtasks: supabaseFetchSubtasks,
+        addSubtask: supabaseAddSubtask,
         setFilter,
         setSearchQuery,
         getFilteredTasks,

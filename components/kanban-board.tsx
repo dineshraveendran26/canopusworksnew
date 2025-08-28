@@ -12,9 +12,9 @@ export function KanbanBoard() {
   const { getTasksByStatus, filter, getFilteredTasks, setFilter, searchQuery, setSearchQuery, tasks } = useTaskContext()
 
   const [expandedColumns, setExpandedColumns] = useState<Record<string, boolean>>({
-    todo: true,
-    inProgress: true,
-    completed: true,
+    todo: false,
+    inProgress: false,
+    completed: false,
   })
 
   const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({})

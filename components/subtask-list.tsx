@@ -15,6 +15,7 @@ import { Trash2, MessageCircle, Users, CalendarIcon, Send, X, Plus } from "lucid
 import { format } from "date-fns"
 import { useTeamMembers } from "@/hooks/use-team-members"
 import { useSubtaskAssignments } from "@/hooks/use-subtask-assignments"
+import { useTaskContext } from "@/contexts/task-context"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent } from "@/components/ui/card"
 
@@ -35,16 +36,18 @@ interface Subtask {
   comments: SubtaskComment[]
   startDate?: Date
   endDate?: Date
+  task_id?: string
 }
 
 interface SubtaskListProps {
   subtasks: Subtask[]
+  taskId: string // Add task ID prop
   onSubtasksChange: (subtasks: Subtask[]) => void
   onCommentClick?: (subtaskId: string) => void
   selectedCommentSubtask?: string | null
 }
 
-export function SubtaskList({ subtasks, onSubtasksChange, onCommentClick, selectedCommentSubtask }: SubtaskListProps) {
+export function SubtaskList({ subtasks, taskId, onSubtasksChange, onCommentClick, selectedCommentSubtask }: SubtaskListProps) {
   const safeSubtasks = Array.isArray(subtasks) ? subtasks : []
   const { teamMembers, loading: teamMembersLoading } = useTeamMembers()
   const { 
@@ -52,6 +55,7 @@ export function SubtaskList({ subtasks, onSubtasksChange, onCommentClick, select
     assignTeamMembersToSubtask, 
     loading: assignmentLoading 
   } = useSubtaskAssignments()
+  const { addSubtask } = useTaskContext()
 
   // New subtask creation state
   const [isCreatingSubtask, setIsCreatingSubtask] = useState(false)
@@ -94,26 +98,55 @@ export function SubtaskList({ subtasks, onSubtasksChange, onCommentClick, select
     })
   }
 
-  const addSubtask = async () => {
+  const handleAddSubtask = async () => {
     if (newSubtaskData.title.trim()) {
-      // Create a temporary subtask for immediate UI feedback
-      const tempSubtask: Subtask = {
-        id: `temp-${Date.now()}`, // Temporary ID
-        title: newSubtaskData.title.trim(),
-        completed: false,
-        assignees: newSubtaskData.assignees,
-        comments: newSubtaskData.comments,
-        startDate: newSubtaskData.startDate,
-        endDate: newSubtaskData.endDate,
+      try {
+        // Use the taskId prop passed from parent component
+        if (!taskId) {
+          console.error('❌ Cannot create subtask: No task ID provided')
+          return
+        }
+        
+        // Create subtask data for database
+        const subtaskData = {
+          task_id: taskId,
+          title: newSubtaskData.title.trim(),
+          order_index: safeSubtasks.length,
+          start_date: newSubtaskData.startDate ? newSubtaskData.startDate.toISOString().split('T')[0] : null,
+          end_date: newSubtaskData.endDate ? newSubtaskData.endDate.toISOString().split('T')[0] : null,
+          completed: false,
+          created_by: null // Will be set by the database trigger
+        }
+        
+        console.log('🔄 Creating subtask in database:', subtaskData)
+        
+        // Save subtask to database
+        const newSubtask = await addSubtask(subtaskData)
+        
+        if (newSubtask) {
+          console.log('✅ Subtask created successfully:', newSubtask)
+          
+          // Convert database subtask to UI format
+          const uiSubtask: Subtask = {
+            id: newSubtask.id,
+            title: newSubtask.title,
+            completed: newSubtask.completed,
+            assignees: newSubtaskData.assignees,
+            comments: newSubtaskData.comments,
+            startDate: newSubtask.start_date ? new Date(newSubtask.start_date) : undefined,
+            endDate: newSubtask.end_date ? new Date(newSubtask.end_date) : undefined,
+            task_id: newSubtask.task_id
+          }
+          
+          // Add to local state
+          onSubtasksChange([...safeSubtasks, uiSubtask])
+          cancelCreatingSubtask()
+        } else {
+          console.error('❌ Failed to create subtask in database')
+        }
+      } catch (error) {
+        console.error('❌ Error creating subtask:', error)
       }
-      
-      // Add to local state immediately for UI responsiveness
-      onSubtasksChange([...safeSubtasks, tempSubtask])
-      cancelCreatingSubtask()
-      
-      // Note: The actual subtask will be saved to the database when the task is saved
-      // This provides immediate UI feedback while ensuring data persistence
-      console.log('🔄 Subtask added to local state, will be saved when task is saved')
     }
   }
 
@@ -478,7 +511,7 @@ export function SubtaskList({ subtasks, onSubtasksChange, onCommentClick, select
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault()
-                    addSubtask()
+                    handleAddSubtask()
                   }
                 }}
               />
@@ -627,7 +660,7 @@ export function SubtaskList({ subtasks, onSubtasksChange, onCommentClick, select
                 </Button>
                 <Button
                   type="button"
-                  onClick={addSubtask}
+                  onClick={handleAddSubtask}
                   size="sm"
                   disabled={!newSubtaskData.title.trim()}
                   className="bg-blue-600 hover:bg-blue-700 h-8 px-3"

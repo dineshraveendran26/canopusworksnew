@@ -407,26 +407,34 @@ export function useTasks() {
 
       console.log('✅ Tasks fetched successfully:', data?.length || 0, 'tasks')
 
-      // Convert Supabase tasks to UI format
-      const uiTasks = (data || []).map(convertSupabaseToUITask)
-      console.log('🔄 Fetched tasks from database:', uiTasks.length, 'tasks')
-      console.log('🔄 Task IDs:', uiTasks.map(t => t.id))
-      setTasks(uiTasks)
-
-      // Fetch subtasks and assignments for all tasks
+      // First fetch all subtasks and assignments for all tasks
       if (data && data.length > 0) {
         console.log('🔄 Fetching subtasks and assignments for all tasks...')
+        
+        // Fetch all subtasks first
         for (const task of data) {
-          await Promise.all([
-            fetchSubtasks(task.id),
-            fetchTaskAssignments(task.id).then(assigneeIds => {
-              // Update the task with its assignees
-              setTasks(prev => prev.map((t: Task) => 
-                t.id === task.id ? { ...t, assignees: assigneeIds } : t
-              ))
-            })
-          ])
+          await fetchSubtasks(task.id)
         }
+        
+        // Now convert tasks to UI format with subtasks available
+        const uiTasks = (data || []).map(convertSupabaseToUITask)
+        console.log('🔄 Fetched tasks from database:', uiTasks.length, 'tasks')
+        console.log('🔄 Task IDs:', uiTasks.map(t => t.id))
+        
+        // Set tasks with subtasks included
+        setTasks(uiTasks)
+        
+        // Then fetch and update assignments
+        for (const task of data) {
+          const assigneeIds = await fetchTaskAssignments(task.id)
+          // Update the task with its assignees
+          setTasks(prev => prev.map((t: Task) => 
+            t.id === task.id ? { ...t, assignees: assigneeIds } : t
+          ))
+        }
+      } else {
+        // No tasks, just set empty array
+        setTasks([])
       }
     } catch (err) {
       console.error('❌ Error in fetchTasks:', err)
