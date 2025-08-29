@@ -499,48 +499,36 @@ export function useTasks() {
     }
   }
 
-  // Fetch subtasks for a specific task with assignees
+  // Fetch subtasks for a specific task with assignees - OPTIMIZED VERSION
   const fetchSubtasks = async (taskId: string) => {
     try {
-      // First fetch subtasks
+      console.log('🚀 fetchSubtasks: Using optimized RPC function for task:', taskId)
+      
+      // Use the optimized RPC function instead of N+1 queries
       const { data: subtasksData, error: subtasksError } = await supabase
-        .from('subtasks')
-        .select('*')
-        .eq('task_id', taskId)
-        .order('order_index', { ascending: true })
+        .rpc('get_subtasks_with_assignees', { task_id_param: taskId })
 
       if (subtasksError) {
-        console.error('Error fetching subtasks:', subtasksError)
+        console.error('❌ Error fetching subtasks with RPC:', subtasksError)
         return
       }
 
-      // Then fetch assignees for each subtask
-      const subtasksWithAssignees = await Promise.all(
-        (subtasksData || []).map(async (subtask) => {
-          const { data: assigneesData, error: assigneesError } = await supabase
-            .from('subtask_assignments')
-            .select('team_member_id') // Changed from user_id to team_member_id
+      console.log('✅ fetchSubtasks: RPC returned', subtasksData?.length || 0, 'subtasks')
 
-          if (assigneesError) {
-            console.warn('Error fetching subtask assignees:', assigneesError)
-            return { ...subtask, assignees: [] }
-          }
-
-          return {
-            ...subtask,
-            startDate: subtask.start_date ? new Date(subtask.start_date) : undefined,
-            endDate: subtask.end_date ? new Date(subtask.end_date) : undefined,
-            assignees: assigneesData?.map((a: { team_member_id: string }) => a.team_member_id) || []
-          }
-        })
-      )
+      // Transform the data to match your UI expectations
+      const transformedSubtasks = (subtasksData || []).map((subtask: any) => ({
+        ...subtask,
+        startDate: subtask.start_date ? new Date(subtask.start_date) : undefined,
+        endDate: subtask.end_date ? new Date(subtask.end_date) : undefined,
+        assignees: subtask.assignee_ids || [] // Use the pre-aggregated assignee IDs
+      }))
 
       setSubtasks(prev => {
         const filtered = prev.filter(subtask => subtask.task_id !== taskId)
-        return [...filtered, ...subtasksWithAssignees]
+        return [...filtered, ...transformedSubtasks]
       })
     } catch (err) {
-      console.error('Error in fetchSubtasks:', err)
+      console.error('❌ Error in fetchSubtasks:', err)
     }
   }
 
@@ -890,7 +878,9 @@ export function useTasks() {
 
   // Update a subtask
   const updateSubtask = async (id: string, updates: Partial<Subtask>): Promise<Subtask | null> => {
+    console.log('🔄 use-tasks updateSubtask START - Called with:', { id, updates })
     try {
+      console.log('🔄 use-tasks updateSubtask - About to make Supabase call...')
       const { data, error: updateError } = await supabase
         .from('subtasks')
         .update({ ...updates, updated_at: new Date().toISOString() })
@@ -898,16 +888,21 @@ export function useTasks() {
         .select()
         .single()
 
+      console.log('🔄 use-tasks updateSubtask - Supabase response:', { data, error: updateError })
+
       if (updateError) {
-        console.error('Error updating subtask:', updateError)
+        console.error('❌ use-tasks updateSubtask - Supabase error:', updateError)
         return null
       }
 
+      console.log('✅ use-tasks updateSubtask - Success, updating local state')
       setSubtasks(prev => prev.map(subtask => subtask.id === id ? data : subtask))
       return data
     } catch (err) {
-      console.error('Error in updateSubtask:', err)
+      console.error('❌ use-tasks updateSubtask - Exception:', err)
       return null
+    } finally {
+      console.log('🔄 use-tasks updateSubtask END')
     }
   }
 

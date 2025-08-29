@@ -49,6 +49,12 @@ interface SubtaskListProps {
 }
 
 export function SubtaskList({ subtasks, taskId, onSubtasksChange, onCommentClick, selectedCommentSubtask }: SubtaskListProps) {
+  console.log('🎯 SubtaskList component rendered!', { 
+    subtasksCount: subtasks?.length, 
+    taskId, 
+    subtasks: subtasks?.slice(0, 2) // Show first 2 subtasks for debugging
+  })
+  
   const safeSubtasks = Array.isArray(subtasks) ? subtasks : []
   const { teamMembers, loading: teamMembersLoading } = useTeamMembers()
   const { 
@@ -153,6 +159,8 @@ export function SubtaskList({ subtasks, taskId, onSubtasksChange, onCommentClick
   }
 
   const updateSubtask = async (id: string, updates: Partial<Subtask>) => {
+    console.log('🚀 updateSubtask function called!', { id, updates })
+    
     // Update local state immediately for UI responsiveness
     onSubtasksChange(safeSubtasks.map((subtask) => (subtask.id === id ? { ...subtask, ...updates } : subtask)))
     
@@ -175,8 +183,13 @@ export function SubtaskList({ subtasks, taskId, onSubtasksChange, onCommentClick
           dbUpdates.completed_at = null
         }
         
+        console.log('📤 About to call updateSubtaskInDB with:', { id, dbUpdates })
+        console.log('📤 updateSubtaskInDB function type:', typeof updateSubtaskInDB)
+        
         // Update in database
         const result = await updateSubtaskInDB(id, dbUpdates)
+        
+        console.log('📥 updateSubtaskInDB result:', result)
         
         if (result) {
           console.log('✅ Subtask completion updated successfully in database:', result)
@@ -419,7 +432,10 @@ export function SubtaskList({ subtasks, taskId, onSubtasksChange, onCommentClick
                 <span className="text-xs text-muted-foreground font-medium w-6 flex-shrink-0">{index + 1}.</span>
                 <Checkbox
                   checked={subtask.completed}
-                  onCheckedChange={(checked) => updateSubtask(subtask.id, { completed: !!checked })}
+                  onCheckedChange={(checked) => {
+                    console.log('🔍 Checkbox clicked!', { subtaskId: subtask.id, checked, currentCompleted: subtask.completed })
+                    updateSubtask(subtask.id, { completed: !!checked })
+                  }}
                   disabled={updatingSubtask === subtask.id}
                   className={cn(
                     "flex-shrink-0 border-2 border-gray-400 hover:border-gray-500 data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground",

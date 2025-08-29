@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, type ReactNode } from "react"
 import { useTasks, type Task, type Subtask, type Comment } from "@/hooks/use-tasks"
 import { useAuth } from "@/contexts/auth-context"
+import { supabase } from "@/lib/supabase"
 
 interface FilterType {
   type: "all" | "completed" | "attention"
@@ -32,7 +33,13 @@ export function TaskProvider({ children }: { children: ReactNode }) {
   
   // Wait for user authentication before initializing useTasks
   const { user, loading: authLoading } = useAuth()
-  console.log('🔄 TaskProvider - Auth state:', { user: !!user, userId: user?.id, authLoading })
+  console.log('🔄 TaskProvider - Auth state:', { 
+    user: !!user, 
+    userId: user?.id, 
+    userEmail: user?.email,
+    authLoading,
+    userDetails: user 
+  })
   
   // Always call useTasks to maintain hook order consistency
   const {
@@ -51,7 +58,8 @@ export function TaskProvider({ children }: { children: ReactNode }) {
     tasksCount: tasks?.length || 0,
     hasAddTask: !!supabaseAddTask,
     hasUpdateTask: !!supabaseUpdateTask,
-    hasDeleteTask: !!supabaseDeleteTask
+    hasDeleteTask: !!supabaseDeleteTask,
+    hasUpdateSubtask: !!supabaseUpdateSubtask
   })
 
   const [filter, setFilter] = useState<FilterType>({ type: "all" })
@@ -142,16 +150,43 @@ export function TaskProvider({ children }: { children: ReactNode }) {
   }
 
   const updateSubtask = async (id: string, updates: any) => {
+    console.log('🔄 TaskContext updateSubtask START - Called with:', { id, updates })
+    console.log('🔄 TaskContext updateSubtask - User auth state:', { 
+      user: !!user, 
+      userId: user?.id, 
+      userEmail: user?.email,
+      authLoading
+    })
+    
     if (!user || authLoading) {
       console.error('❌ TaskContext: User not authenticated, cannot update subtask')
       return null
     }
+    
+    // Check user role in database for debugging
     try {
+      const { data: userRoleData, error: roleError } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+      
+      console.log('🔄 TaskContext updateSubtask - Database user role:', { userRoleData, roleError })
+    } catch (roleCheckError) {
+      console.log('🔄 TaskContext updateSubtask - Could not check user role:', roleCheckError)
+    }
+    
+    try {
+      console.log('🔄 TaskContext updateSubtask - About to call supabaseUpdateSubtask...')
+      console.log('🔄 TaskContext updateSubtask - supabaseUpdateSubtask function:', typeof supabaseUpdateSubtask)
       const result = await supabaseUpdateSubtask(id, updates)
+      console.log('🔄 TaskContext updateSubtask - supabaseUpdateSubtask result:', result)
       return result
     } catch (error) {
       console.error('❌ TaskContext: updateSubtask error:', error)
       throw error
+    } finally {
+      console.log('🔄 TaskContext updateSubtask END')
     }
   }
 
