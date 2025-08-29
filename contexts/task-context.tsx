@@ -19,6 +19,7 @@ interface TaskContextType {
   getTasksByStatus: (status: string) => Task[]
   fetchSubtasks: (taskId: string) => Promise<void>
   addSubtask: (subtaskData: any) => Promise<any>
+  updateSubtask: (id: string, updates: any) => Promise<any>
   setFilter: (filter: FilterType) => void
   setSearchQuery: (query: string) => void
   getFilteredTasks: () => Task[]
@@ -43,6 +44,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
     getTasksByStatus,
     fetchSubtasks: supabaseFetchSubtasks,
     addSubtask: supabaseAddSubtask,
+    updateSubtask: supabaseUpdateSubtask,
   } = useTasks()
   
   console.log('🔄 TaskProvider - useTasks result:', {
@@ -139,6 +141,20 @@ export function TaskProvider({ children }: { children: ReactNode }) {
     supabaseDeleteTask(id)
   }
 
+  const updateSubtask = async (id: string, updates: any) => {
+    if (!user || authLoading) {
+      console.error('❌ TaskContext: User not authenticated, cannot update subtask')
+      return null
+    }
+    try {
+      const result = await supabaseUpdateSubtask(id, updates)
+      return result
+    } catch (error) {
+      console.error('❌ TaskContext: updateSubtask error:', error)
+      throw error
+    }
+  }
+
   const getFilteredTasks = () => {
     // Ensure tasks is always an array
     const safeTasks = tasks || []
@@ -180,6 +196,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
         getTasksByStatus,
         fetchSubtasks: supabaseFetchSubtasks,
         addSubtask: supabaseAddSubtask,
+        updateSubtask,
         setFilter,
         setSearchQuery,
         getFilteredTasks,

@@ -37,6 +37,7 @@ interface Subtask {
   startDate?: Date
   endDate?: Date
   task_id?: string
+  completed_at?: string // Added for completion timestamp
 }
 
 interface SubtaskListProps {
@@ -55,7 +56,7 @@ export function SubtaskList({ subtasks, taskId, onSubtasksChange, onCommentClick
     assignTeamMembersToSubtask, 
     loading: assignmentLoading 
   } = useSubtaskAssignments()
-  const { addSubtask } = useTaskContext()
+  const { addSubtask, updateSubtask: updateSubtaskInDB } = useTaskContext()
 
   // New subtask creation state
   const [isCreatingSubtask, setIsCreatingSubtask] = useState(false)
@@ -74,6 +75,7 @@ export function SubtaskList({ subtasks, taskId, onSubtasksChange, onCommentClick
   const [commentModalOpen, setCommentModalOpen] = useState<string | null>(null)
   const [newCommentText, setNewCommentText] = useState("")
   const [editingComment, setEditingComment] = useState<{ subtaskId: string; commentId: string; text: string } | null>(null)
+  const [updatingSubtask, setUpdatingSubtask] = useState<string | null>(null)
 
   // New subtask creation functions
   const startCreatingSubtask = () => {
@@ -150,8 +152,51 @@ export function SubtaskList({ subtasks, taskId, onSubtasksChange, onCommentClick
     }
   }
 
-  const updateSubtask = (id: string, updates: Partial<Subtask>) => {
+  const updateSubtask = async (id: string, updates: Partial<Subtask>) => {
+    // Update local state immediately for UI responsiveness
     onSubtasksChange(safeSubtasks.map((subtask) => (subtask.id === id ? { ...subtask, ...updates } : subtask)))
+    
+    // If this is a completion update, persist it to the database
+    if ('completed' in updates) {
+      try {
+        setUpdatingSubtask(id)
+        console.log('🔄 Updating subtask completion in database:', { id, completed: updates.completed })
+        
+        // Prepare database update data
+        const dbUpdates: any = {
+          completed: updates.completed,
+          updated_at: new Date().toISOString()
+        }
+        
+        // Set completed_at timestamp when completing
+        if (updates.completed) {
+          dbUpdates.completed_at = new Date().toISOString()
+        } else {
+          dbUpdates.completed_at = null
+        }
+        
+        // Update in database
+        const result = await updateSubtaskInDB(id, dbUpdates)
+        
+        if (result) {
+          console.log('✅ Subtask completion updated successfully in database:', result)
+        } else {
+          console.error('❌ Failed to update subtask completion in database')
+          // Revert local state on error
+          onSubtasksChange(safeSubtasks.map((subtask) => 
+            subtask.id === id ? { ...subtask, completed: !updates.completed } : subtask
+          ))
+        }
+      } catch (error) {
+        console.error('❌ Error updating subtask completion:', error)
+        // Revert local state on error
+        onSubtasksChange(safeSubtasks.map((subtask) => 
+          subtask.id === id ? { ...subtask, completed: !updates.completed } : subtask
+        ))
+      } finally {
+        setUpdatingSubtask(null)
+      }
+    }
   }
 
   const deleteSubtask = (id: string) => {
@@ -258,11 +303,111 @@ export function SubtaskList({ subtasks, taskId, onSubtasksChange, onCommentClick
     }
   }
 
+  // Handle bulk completion updates
+  const handleBulkCompletion = async (subtaskIds: string[], completed: boolean) => {
+    const updates = subtaskIds.map(id => ({ id, completed }))
+    
+    // Update local state immediately
+    updates.forEach(({ id, completed }) => {
+      onSubtasksChange(safeSubtasks.map((subtask) => 
+        subtask.id === id ? { ...subtask, completed } : subtask
+      ))
+    })
+    
+    // Update database for each subtask
+    const promises = updates.map(async ({ id, completed }) => {
+      try {
+        setUpdatingSubtask(id)
+        const dbUpdates: any = {
+          completed,
+          updated_at: new Date().toISOString()
+        }
+        
+        if (completed) {
+          dbUpdates.completed_at = new Date().toISOString()
+        } else {
+          dbUpdates.completed_at = null
+        }
+        
+        const result = await updateSubtaskInDB(id, dbUpdates)
+        return { id, success: !!result, error: null }
+      } catch (error) {
+        console.error(`❌ Error updating subtask ${id}:`, error)
+        return { id, success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+      } finally {
+        setUpdatingSubtask(null)
+      }
+    })
+    
+    const results = await Promise.all(promises)
+    const failures = results.filter(r => !r.success)
+    
+    if (failures.length > 0) {
+      console.error('❌ Some subtask updates failed:', failures)
+      // Revert failed updates
+      failures.forEach(({ id }) => {
+        onSubtasksChange(safeSubtasks.map((subtask) => 
+          subtask.id === id ? { ...subtask, completed: !completed } : subtask
+        ))
+      })
+    }
+    
+    return results
+  }
+
   return (
     <div className="space-y-4">
       {safeSubtasks.length > 0 && (
         <div className="flex justify-between items-center">
-          <h3 className="text-sm font-medium text-foreground">Subtasks ({safeSubtasks.length})</h3>
+          <div className="flex items-center gap-4">
+            <h3 className="text-sm font-medium text-foreground">
+              Subtasks ({safeSubtasks.length})
+            </h3>
+            {safeSubtasks.length > 0 && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="px-2 py-1 bg-green-50 text-green-700 rounded-full">
+                  {safeSubtasks.filter(s => s.completed).length} completed
+                </span>
+                <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded-full">
+                  {safeSubtasks.filter(s => !s.completed).length} remaining
+                </span>
+              </div>
+            )}
+          </div>
+          {safeSubtasks.length > 1 && (
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const incompleteIds = safeSubtasks.filter(s => !s.completed).map(s => s.id)
+                  if (incompleteIds.length > 0) {
+                    handleBulkCompletion(incompleteIds, true)
+                  }
+                }}
+                disabled={safeSubtasks.every(s => s.completed)}
+                className="h-7 px-2 text-xs"
+              >
+                Complete All
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const completedIds = safeSubtasks.filter(s => s.completed).map(s => s.id)
+                  if (completedIds.length > 0) {
+                    handleBulkCompletion(completedIds, false)
+                  }
+                }}
+                disabled={safeSubtasks.every(s => !s.completed)}
+                className="h-7 px-2 text-xs"
+              >
+                Uncomplete All
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -275,8 +420,15 @@ export function SubtaskList({ subtasks, taskId, onSubtasksChange, onCommentClick
                 <Checkbox
                   checked={subtask.completed}
                   onCheckedChange={(checked) => updateSubtask(subtask.id, { completed: !!checked })}
-                  className="flex-shrink-0 border-2 border-gray-400 hover:border-gray-500 data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
+                  disabled={updatingSubtask === subtask.id}
+                  className={cn(
+                    "flex-shrink-0 border-2 border-gray-400 hover:border-gray-500 data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground",
+                    updatingSubtask === subtask.id && "opacity-50 cursor-not-allowed"
+                  )}
                 />
+                {updatingSubtask === subtask.id && (
+                  <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                )}
                 <Input
                   id={`subtask-title-${subtask.id}`}
                   name={`subtask-title-${subtask.id}`}
@@ -284,11 +436,22 @@ export function SubtaskList({ subtasks, taskId, onSubtasksChange, onCommentClick
                   onChange={(e) => updateSubtask(subtask.id, { title: e.target.value })}
                   onKeyDown={handleSubtaskTitleKeyDown}
                   className={cn(
-                    "flex-1 min-w-0 border-none bg-transparent p-0 focus-visible:ring-0 text-sm",
-                    subtask.completed && "line-through text-muted-foreground",
+                    "flex-1 min-w-0 border-none bg-transparent p-0 focus-visible:ring-0 text-sm transition-all duration-200",
+                    subtask.completed && "line-through text-muted-foreground opacity-70"
                   )}
                   placeholder={`Subtask ${index + 1}`}
                 />
+                {subtask.completed && (
+                  <div className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full">
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    Completed
+                    {subtask.completed_at && (
+                      <span className="text-green-500 ml-1">
+                        {format(new Date(subtask.completed_at), "MMM dd")}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
               
               <div className="flex items-center gap-1 flex-shrink-0">
