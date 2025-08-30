@@ -11,13 +11,14 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Trash2, MessageCircle, Users, CalendarIcon, Send, X, Plus } from "lucide-react"
+import { Trash2, MessageCircle, Users, CalendarIcon, Send, X, Plus, RotateCcw, Check } from "lucide-react"
 import { format } from "date-fns"
 import { useTeamMembers } from "@/hooks/use-team-members"
 import { useSubtaskAssignments } from "@/hooks/use-subtask-assignments"
 import { useTaskContext } from "@/contexts/task-context"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent } from "@/components/ui/card"
+import { useAuth } from "@/contexts/auth-context"
 
 interface SubtaskComment {
   id: string
@@ -26,6 +27,8 @@ interface SubtaskComment {
   timestamp: Date
   editedAt?: Date
   isEditing?: boolean
+  uploadStatus?: 'uploading' | 'success' | 'failed'
+  isTemporary?: boolean
 }
 
 interface Subtask {
@@ -49,8 +52,14 @@ interface SubtaskListProps {
   isTaskCreation?: boolean // NEW: Flag to detect task creation mode
 }
 
-export function SubtaskList({ subtasks, taskId, onSubtasksChange, onCommentClick, selectedCommentSubtask, isTaskCreation = false }: SubtaskListProps) {
-  console.log('🚨 SUBTASK LIST RENDERED!!! Props:', { taskId, isTaskCreation, mode: isTaskCreation ? 'CREATE' : 'EDIT' })
+export function SubtaskList({ 
+  subtasks, 
+  taskId, 
+  onSubtasksChange, 
+  onCommentClick, 
+  selectedCommentSubtask, 
+  isTaskCreation = false 
+}: SubtaskListProps) {
   const safeSubtasks = Array.isArray(subtasks) ? subtasks : []
   const { teamMembers, loading: teamMembersLoading } = useTeamMembers()
   const { 
@@ -58,7 +67,8 @@ export function SubtaskList({ subtasks, taskId, onSubtasksChange, onCommentClick
     assignTeamMembersToSubtask, 
     loading: assignmentLoading 
   } = useSubtaskAssignments()
-  const { addSubtask, updateSubtask: updateSubtaskInDB } = useTaskContext()
+  const { addSubtask, updateSubtask: updateSubtaskInDB, addComment: addCommentDB, updateComment: updateCommentDB, deleteComment: deleteCommentDB } = useTaskContext()
+  const { user } = useAuth()
 
   // New subtask creation state
   const [isCreatingSubtask, setIsCreatingSubtask] = useState(false)
@@ -81,7 +91,6 @@ export function SubtaskList({ subtasks, taskId, onSubtasksChange, onCommentClick
 
   // New subtask creation functions
   const startCreatingSubtask = () => {
-    console.log('🚨 START CREATING SUBTASK CLICKED!!!')
     setIsCreatingSubtask(true)
     setNewSubtaskData({
       title: "",
@@ -104,23 +113,17 @@ export function SubtaskList({ subtasks, taskId, onSubtasksChange, onCommentClick
   }
 
   const handleAddSubtask = async () => {
-    console.log('🚨 HANDLE ADD SUBTASK FUNCTION CALLED!!!')
     if (newSubtaskData.title.trim()) {
       
-      // DEBUG: Log all the values we're checking
-      console.log('🔍 handleAddSubtask Debug:', {
-        isTaskCreation,
-        taskId,
-        taskIdCheck1: taskId === 'temp-task-id',
-        taskIdCheck2: taskId.startsWith('temp-'),
-        willUseCreationMode: isTaskCreation || taskId === 'temp-task-id' || taskId.startsWith('temp-')
-      })
-      
-      // NEW LOGIC: Check if we're in task creation mode - FORCE SUCCESS FOR NOW
-      console.log('🔥🔥🔥 ABOUT TO CHECK CONDITION - taskId:', taskId, 'isTaskCreation:', isTaskCreation)
-      if (true || isTaskCreation || taskId === 'temp-task-id' || taskId.startsWith('temp-')) {
+      // NEW LOGIC: Check if we're in task creation mode
+      if (isTaskCreation || taskId === 'temp-task-id' || taskId.startsWith('temp-')) {
+        console.log('🆕 CREATION MODE - Creating temporary subtask...')
+        console.log('🔍 CREATION MODE - Task ID:', taskId)
+        console.log('🔍 CREATION MODE - Is Task Creation:', isTaskCreation)
+        console.log('🔍 CREATION MODE - Current subtasks count:', safeSubtasks.length)
+        console.log('🔍 CREATION MODE - New subtask data:', newSubtaskData)
+        
         // CREATION MODE: Store in local state only
-        console.log('📝 Task creation mode: Adding subtask to local state only')
         
         // Generate temporary ID for UI purposes
         const tempSubtask: Subtask = {
@@ -134,16 +137,25 @@ export function SubtaskList({ subtasks, taskId, onSubtasksChange, onCommentClick
           task_id: taskId // Will be temp ID for now
         }
         
+        console.log('✅ CREATION MODE - Generated temp subtask:', tempSubtask)
+        
         // Add to local state immediately
-        onSubtasksChange([...safeSubtasks, tempSubtask])
+        const newSubtasksArray = [...safeSubtasks, tempSubtask]
+        console.log('🔄 CREATION MODE - Calling onSubtasksChange with:', newSubtasksArray.length, 'subtasks')
+        onSubtasksChange(newSubtasksArray)
+        console.log('✅ CREATION MODE - Subtask creation completed')
         cancelCreatingSubtask()
         
-        console.log('✅ Subtask added to local state:', tempSubtask)
         return
       }
       
       // EDIT MODE: Save to database immediately (existing logic)
       try {
+        console.log('🔄 SUBTASK SAVE - Starting database save process...')
+        console.log('🔍 SUBTASK SAVE - Task ID:', taskId)
+        console.log('🔍 SUBTASK SAVE - Is Task Creation?', isTaskCreation)
+        console.log('🔍 SUBTASK SAVE - Subtask Data:', newSubtaskData)
+        
         // Use the taskId prop passed from parent component
         if (!taskId) {
           console.error('❌ Cannot create subtask: No task ID provided')
@@ -153,14 +165,6 @@ export function SubtaskList({ subtasks, taskId, onSubtasksChange, onCommentClick
         // Create subtask data for database with detailed logging
         const startDateStr = newSubtaskData.startDate ? newSubtaskData.startDate.toISOString().split('T')[0] : null
         const endDateStr = newSubtaskData.endDate ? newSubtaskData.endDate.toISOString().split('T')[0] : null
-        
-        console.log('🔍 Date validation debug:', {
-          startDate: newSubtaskData.startDate,
-          endDate: newSubtaskData.endDate,
-          startDateStr,
-          endDateStr,
-          constraint: 'start_date <= end_date (if both provided)'
-        })
         
         const subtaskData = {
           task_id: taskId,
@@ -172,14 +176,12 @@ export function SubtaskList({ subtasks, taskId, onSubtasksChange, onCommentClick
           created_by: null // Will be set by the database trigger
         }
         
-        console.log('🔄 Edit mode: Creating subtask in database:', subtaskData)
-        
         // Save subtask to database
+        console.log('💾 SUBTASK SAVE - Calling addSubtask with data:', subtaskData)
         const newSubtask = await addSubtask(subtaskData)
+        console.log('📥 SUBTASK SAVE - Database response:', newSubtask)
         
         if (newSubtask) {
-          console.log('✅ Subtask created successfully:', newSubtask)
-          
           // Convert database subtask to UI format
           const uiSubtask: Subtask = {
             id: newSubtask.id,
@@ -193,7 +195,10 @@ export function SubtaskList({ subtasks, taskId, onSubtasksChange, onCommentClick
           }
           
           // Add to local state
+          console.log('✅ SUBTASK SAVE - Adding to local state:', uiSubtask)
+          console.log('🔍 SUBTASK SAVE - Current subtasks count:', safeSubtasks.length)
           onSubtasksChange([...safeSubtasks, uiSubtask])
+          console.log('✅ SUBTASK SAVE - Subtask creation completed successfully')
           cancelCreatingSubtask()
         } else {
           console.error('❌ Failed to create subtask in database')
@@ -292,28 +297,188 @@ export function SubtaskList({ subtasks, taskId, onSubtasksChange, onCommentClick
     setNewCommentText("")
   }
 
-  const addComment = (subtaskId: string) => {
-    if (newCommentText.trim()) {
-      const subtask = safeSubtasks.find((s) => s.id === subtaskId)
-      if (subtask) {
-        const newComment: SubtaskComment = {
-          id: Date.now().toString(),
-          text: newCommentText.trim(),
-          author: "Dinesh Raveendran", // Mock user for now
-          timestamp: new Date(),
+  const addComment = async (subtaskId: string) => {
+    if (!newCommentText.trim() || !user) return
+
+    // Create optimistic UI comment
+    const tempComment: SubtaskComment = {
+      id: `temp-comment-${Date.now()}`,
+      text: newCommentText.trim(),
+      author: (user as any)?.user_metadata?.full_name || user.email || 'Current User',
+      timestamp: new Date(),
+      uploadStatus: 'uploading',
+      isTemporary: true
+    }
+
+    // Update subtask comments optimistically
+    const subtask = safeSubtasks.find((s) => s.id === subtaskId)
+    if (subtask) {
+      const updatedComments = [...(subtask.comments || []), tempComment]
+      
+      // Update in parent component immediately
+      const updatedSubtasks = safeSubtasks.map(s => 
+        s.id === subtaskId ? { ...s, comments: updatedComments } : s
+      )
+      onSubtasksChange(updatedSubtasks)
+      setNewCommentText("")
+
+      // If in task creation mode, just keep in local state
+      if (isTaskCreation) {
+        const successComment = { ...tempComment, uploadStatus: 'success' as const, isTemporary: false }
+        const finalComments = [...(subtask.comments || []), successComment]
+        const finalSubtasks = safeSubtasks.map(s => 
+          s.id === subtaskId ? { ...s, comments: finalComments } : s
+        )
+        onSubtasksChange(finalSubtasks)
+        return
+      }
+
+      try {
+        // Save to database
+        const commentData = {
+          subtask_id: subtaskId,
+          content: tempComment.text,
+          author_id: user.id,
+          is_internal: false
         }
-        const updatedComments = [...(subtask.comments || []), newComment]
-        updateSubtask(subtaskId, { comments: updatedComments })
-        setNewCommentText("")
+        
+        const dbComment = await addCommentDB(commentData)
+        
+        if (dbComment) {
+          // Replace temp comment with real one
+          const realComment: SubtaskComment = {
+            id: dbComment.id,
+            text: dbComment.content,
+            author: tempComment.author,
+            timestamp: new Date(dbComment.created_at),
+            uploadStatus: 'success' as const
+          }
+          
+          const finalComments = (subtask.comments || []).map(c => 
+            c.id === tempComment.id ? realComment : c
+          )
+          const finalSubtasks = safeSubtasks.map(s => 
+            s.id === subtaskId ? { ...s, comments: finalComments } : s
+          )
+          onSubtasksChange(finalSubtasks)
+        } else {
+          throw new Error('Failed to save comment')
+        }
+      } catch (error) {
+        console.error('Error saving subtask comment:', error)
+        // Mark as failed
+        const failedComment = { ...tempComment, uploadStatus: 'failed' as const }
+        const failedComments = (subtask.comments || []).map(c => 
+          c.id === tempComment.id ? failedComment : c
+        )
+        const failedSubtasks = safeSubtasks.map(s => 
+          s.id === subtaskId ? { ...s, comments: failedComments } : s
+        )
+        onSubtasksChange(failedSubtasks)
       }
     }
   }
 
-  const deleteComment = (subtaskId: string, commentId: string) => {
+  const deleteComment = async (subtaskId: string, commentId: string) => {
     const subtask = safeSubtasks.find((s) => s.id === subtaskId)
-    if (subtask) {
-      const updatedComments = subtask.comments.filter((c) => c.id !== commentId)
-      updateSubtask(subtaskId, { comments: updatedComments })
+    if (!subtask) return
+
+    const comment = subtask.comments?.find(c => c.id === commentId)
+    if (!comment) return
+
+    // Remove from UI immediately (optimistic delete)
+    const updatedComments = (subtask.comments || []).filter((c) => c.id !== commentId)
+    const updatedSubtasks = safeSubtasks.map(s => 
+      s.id === subtaskId ? { ...s, comments: updatedComments } : s
+    )
+    onSubtasksChange(updatedSubtasks)
+
+    // If temporary comment or in creation mode, just remove from UI
+    if (comment.isTemporary || isTaskCreation) {
+      return
+    }
+
+    try {
+      // Delete from database
+      const success = await deleteCommentDB(commentId)
+      if (!success) {
+        // Restore comment if delete failed
+        const restoredComments = [...updatedComments, comment]
+        const restoredSubtasks = safeSubtasks.map(s => 
+          s.id === subtaskId ? { ...s, comments: restoredComments } : s
+        )
+        onSubtasksChange(restoredSubtasks)
+      }
+    } catch (error) {
+      console.error('Error deleting subtask comment:', error)
+      // Restore comment on error
+      const restoredComments = [...updatedComments, comment]
+      const restoredSubtasks = safeSubtasks.map(s => 
+        s.id === subtaskId ? { ...s, comments: restoredComments } : s
+      )
+      onSubtasksChange(restoredSubtasks)
+    }
+  }
+
+  const retryComment = async (subtaskId: string, commentId: string) => {
+    const subtask = safeSubtasks.find((s) => s.id === subtaskId)
+    if (!subtask) return
+
+    const comment = subtask.comments?.find(c => c.id === commentId)
+    if (!comment) return
+
+    // Mark as uploading
+    const uploadingComment = { ...comment, uploadStatus: 'uploading' as const }
+    const uploadingComments = (subtask.comments || []).map(c => 
+      c.id === commentId ? uploadingComment : c
+    )
+    const uploadingSubtasks = safeSubtasks.map(s => 
+      s.id === subtaskId ? { ...s, comments: uploadingComments } : s
+    )
+    onSubtasksChange(uploadingSubtasks)
+
+    try {
+      // Retry save to database
+      const commentData = {
+        subtask_id: subtaskId,
+        content: comment.text,
+        author_id: user?.id || '',
+        is_internal: false
+      }
+      
+      const dbComment = await addCommentDB(commentData)
+      
+      if (dbComment) {
+        // Replace with real comment
+        const realComment: SubtaskComment = {
+          id: dbComment.id,
+          text: dbComment.content,
+          author: comment.author,
+          timestamp: new Date(dbComment.created_at),
+          uploadStatus: 'success' as const
+        }
+        
+        const finalComments = (subtask.comments || []).map(c => 
+          c.id === commentId ? realComment : c
+        )
+        const finalSubtasks = safeSubtasks.map(s => 
+          s.id === subtaskId ? { ...s, comments: finalComments } : s
+        )
+        onSubtasksChange(finalSubtasks)
+      } else {
+        throw new Error('Failed to save comment')
+      }
+    } catch (error) {
+      console.error('Error retrying subtask comment:', error)
+      // Mark as failed again
+      const failedComment = { ...comment, uploadStatus: 'failed' as const }
+      const failedComments = (subtask.comments || []).map(c => 
+        c.id === commentId ? failedComment : c
+      )
+      const failedSubtasks = safeSubtasks.map(s => 
+        s.id === subtaskId ? { ...s, comments: failedComments } : s
+      )
+      onSubtasksChange(failedSubtasks)
     }
   }
 
@@ -338,6 +503,19 @@ export function SubtaskList({ subtasks, taskId, onSubtasksChange, onCommentClick
 
   const cancelEditingComment = () => {
     setEditingComment(null)
+  }
+
+  const getUploadStatusIcon = (status?: string) => {
+    switch (status) {
+      case 'uploading':
+        return <div className="animate-spin w-3 h-3 border border-blue-500 border-t-transparent rounded-full" />
+      case 'failed':
+        return <X className="w-3 h-3 text-red-500" />
+      case 'success':
+        return <Check className="w-3 h-3 text-green-500" />
+      default:
+        return null
+    }
   }
 
   const handleSubtaskTitleKeyDown = (e: React.KeyboardEvent) => {
@@ -932,6 +1110,11 @@ export function SubtaskList({ subtasks, taskId, onSubtasksChange, onCommentClick
                           <span className="text-sm font-medium text-foreground truncate">{comment.author}</span>
                           <span className="text-xs text-muted-foreground flex-shrink-0">
                             {format(comment.timestamp, "MMM dd, yyyy 'at' h:mm a")}
+                            {comment.uploadStatus && (
+                              <span className="ml-1 text-xs text-muted-foreground/70">
+                                {getUploadStatusIcon(comment.uploadStatus)}
+                              </span>
+                            )}
                             {comment.editedAt && (
                               <span className="ml-1 text-xs text-muted-foreground/70">(edited)</span>
                             )}
@@ -990,7 +1173,18 @@ export function SubtaskList({ subtasks, taskId, onSubtasksChange, onCommentClick
                       </div>
                       
                       <div className="flex gap-1 flex-shrink-0">
-                        {!editingComment && (
+                        {comment.uploadStatus === 'failed' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => retryComment(commentModalOpen!, comment.id)}
+                            className="h-5 w-5 p-0 text-red-500 hover:text-red-700"
+                            title="Retry upload"
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                          </Button>
+                        )}
+                        {!editingComment && comment.uploadStatus !== 'uploading' && (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -1003,15 +1197,17 @@ export function SubtaskList({ subtasks, taskId, onSubtasksChange, onCommentClick
                             </svg>
                           </Button>
                         )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => deleteComment(commentModalOpen!, comment.id)}
-                          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                          title="Delete comment"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
+                        {comment.uploadStatus !== 'uploading' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => deleteComment(commentModalOpen!, comment.id)}
+                            className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                            title="Delete comment"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        )}
                       </div>
                     </div>
                   ))

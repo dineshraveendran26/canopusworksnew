@@ -70,12 +70,9 @@ export function useTeamMembers() {
       setLoading(true)
       setError(null)
       
-      console.log('🔍 Fetching team members from Supabase...')
-      
       // Check authentication status first
       const { data: { session } } = await supabase.auth.getSession()
       const isAuthenticated = !!session?.user
-      console.log('🔐 Authentication status:', isAuthenticated ? 'Authenticated' : 'Not authenticated')
       
       // Try to fetch from Supabase first
       const { data, error } = await supabase
@@ -106,21 +103,15 @@ export function useTeamMembers() {
       }
 
       if (data && data.length > 0) {
-        console.log('✅ Fetched team members from Supabase:', data)
         // Validate that data has required fields
         const validData = data.filter((item: any) => item && item.id && item.full_name)
         if (validData.length > 0) {
           setTeamMembers(validData)
           setError(null)
         } else {
-          console.log('⚠️ Supabase data is invalid, using local fallback')
-          // setTeamMembers(TEAM_MEMBERS) // Removed local fallback
           setError('Invalid data from database, showing local data')
         }
       } else {
-        console.log('⚠️ No Supabase data, using local fallback')
-        // Fallback to local data if no Supabase data
-        // setTeamMembers(TEAM_MEMBERS) // Removed local fallback
         setError('No data found in database, showing local data')
       }
     } catch (err) {
@@ -138,12 +129,9 @@ export function useTeamMembers() {
     try {
       setError(null)
       
-      console.log('🚀 Adding team member to Supabase:', memberData)
-      
       // Check authentication status first
       const { data: { session } } = await supabase.auth.getSession()
       const isAuthenticated = !!session?.user
-      console.log('🔐 Authentication status:', isAuthenticated ? 'Authenticated' : 'Not authenticated')
       
       // Ensure required fields are present and properly formatted
       const sanitizedData = {
@@ -164,8 +152,6 @@ export function useTeamMembers() {
         user_id: session?.user?.id || null,
       }
       
-      console.log('🧹 Sanitized data for insert:', sanitizedData)
-      
       // Try Supabase insert
       const { data, error } = await supabase
         .from('team_members')
@@ -175,12 +161,6 @@ export function useTeamMembers() {
 
       if (error) {
         console.error('❌ Supabase insert error:', error)
-        console.error('❌ Error details:', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
-        })
         
         // Provide more specific error messages
         if (error.code === '42501') {
@@ -193,8 +173,6 @@ export function useTeamMembers() {
           throw new Error(`Database error: ${error.message}`)
         }
       }
-
-      console.log('✅ Team member added to Supabase:', data)
       
       // Update local state with the new data from Supabase
       setTeamMembers(prev => [data, ...prev])
@@ -456,19 +434,19 @@ export function useTeamMembers() {
 
   // Subscribe to real-time changes
   useEffect(() => {
-    fetchTeamMembers()
-
-    // Check if user is authenticated before setting up realtime
-    const checkAuthAndSetupRealtime = async () => {
+    // Only fetch and setup realtime if we have a session
+    const setupDataAndRealtime = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession()
         
         if (!session?.user) {
-          console.log('ℹ️ User not authenticated, skipping realtime subscription')
-          return null
-        }
-        
-        console.log('📡 Setting up realtime subscription for team_members table...')
+                  setTeamMembers([])
+        setLoading(false)
+        return null
+      }
+      
+      // Fetch team members first
+      await fetchTeamMembers()
         
         const channel = supabase
           .channel('team_members_changes')
@@ -480,20 +458,15 @@ export function useTeamMembers() {
               table: 'team_members'
             },
             (payload: any) => {
-              console.log('🔄 Realtime change detected:', payload)
-              
               if (payload.eventType === 'INSERT') {
-                console.log('➕ New team member inserted:', payload.new)
                 setTeamMembers(prev => [payload.new as TeamMember, ...prev])
               } else if (payload.eventType === 'UPDATE') {
-                console.log('✏️ Team member updated:', payload.new)
                 setTeamMembers(prev => 
                   prev.map(member => 
                     member.id === payload.new.id ? payload.new as TeamMember : member
                   )
                 )
               } else if (payload.eventType === 'DELETE') {
-                console.log('🗑️ Team member deleted:', payload.old)
                 setTeamMembers(prev => 
                   prev.filter(member => member.id !== payload.old.id)
                 )
@@ -501,23 +474,14 @@ export function useTeamMembers() {
             }
           )
           .subscribe((status: any) => {
-            console.log('📡 Realtime subscription status:', status)
-            if (status === 'SUBSCRIBED') {
-              console.log('✅ Realtime subscription active for team_members table')
-            } else if (status === 'CHANNEL_ERROR') {
-              console.log('ℹ️ Realtime subscription not available - continuing without realtime updates')
+            // Handle subscription status silently to reduce console noise
+            if (status === 'CHANNEL_ERROR') {
               // This is normal in development or when RLS is strict
-            } else if (status === 'TIMED_OUT') {
-              console.log('⏰ Realtime subscription timed out - continuing without realtime updates')
-              // Could implement retry logic here if needed
-            } else if (status === 'CLOSED') {
-              console.log('🔌 Realtime subscription closed')
             }
           })
           
         return channel
       } catch (error) {
-        console.log('ℹ️ Realtime subscription setup skipped - continuing without realtime updates')
         // Continue without realtime - it's not critical for basic functionality
         return null
       }
@@ -525,12 +489,11 @@ export function useTeamMembers() {
 
     let channel: any = null
     
-    checkAuthAndSetupRealtime().then(ch => {
+    setupDataAndRealtime().then(ch => {
       channel = ch
     })
 
     return () => {
-      console.log('🔌 Cleaning up realtime subscription')
       if (channel) {
         try {
           supabase.removeChannel(channel)
@@ -539,7 +502,7 @@ export function useTeamMembers() {
         }
       }
     }
-  }, [])
+  }, []) // Empty dependency array is fine since we check auth inside
 
   return {
     teamMembers,

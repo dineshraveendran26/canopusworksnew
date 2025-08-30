@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useState, type ReactNode } from "react"
+import { createContext, useContext, useState, useMemo, type ReactNode } from "react"
 import { useTasks, type Task, type Subtask, type Comment } from "@/hooks/use-tasks"
 import { useAuth } from "@/contexts/auth-context"
 
@@ -17,11 +17,15 @@ interface TaskContextType {
   updateTask: (id: string, updates: Partial<Task>) => Promise<Task | null>
   deleteTask: (id: string) => void
   getTasksByStatus: (status: string) => Task[]
+  fetchTasks: () => Promise<void>
   fetchSubtasks: (taskId: string) => Promise<void>
   addSubtask: (subtaskData: any) => Promise<any>
   updateSubtask: (id: string, updates: any) => Promise<any>
   getTempSubtasks: () => any[]
   clearTempSubtasks: () => void
+  addComment: (commentData: any) => Promise<Comment | null>
+  updateComment: (id: string, updates: any) => Promise<Comment | null>
+  deleteComment: (id: string) => Promise<boolean>
   setFilter: (filter: FilterType) => void
   setSearchQuery: (query: string) => void
   getFilteredTasks: () => Task[]
@@ -30,11 +34,8 @@ interface TaskContextType {
 const TaskContext = createContext<TaskContextType | undefined>(undefined)
 
 export function TaskProvider({ children }: { children: ReactNode }) {
-  console.log('🔄 TaskProvider START - Initializing context')
-  
   // Wait for user authentication before initializing useTasks
   const { user, loading: authLoading } = useAuth()
-  console.log('🔄 TaskProvider - Auth state:', { user: !!user, userId: user?.id, authLoading })
   
   // Always call useTasks to maintain hook order consistency
   const {
@@ -44,17 +45,14 @@ export function TaskProvider({ children }: { children: ReactNode }) {
     updateTask: supabaseUpdateTask,
     deleteTask: supabaseDeleteTask,
     getTasksByStatus,
+    fetchTasks: supabaseFetchTasks,
     fetchSubtasks: supabaseFetchSubtasks,
             addSubtask: supabaseAddSubtaskOriginal,
     updateSubtask: supabaseUpdateSubtask,
+    addComment: supabaseAddComment,
+    updateComment: supabaseUpdateComment,
+    deleteComment: supabaseDeleteComment,
   } = useTasks()
-  
-  console.log('🔄 TaskProvider - useTasks result:', {
-    tasksCount: tasks?.length || 0,
-    hasAddTask: !!supabaseAddTask,
-    hasUpdateTask: !!supabaseUpdateTask,
-    hasDeleteTask: !!supabaseDeleteTask
-  })
 
   const [filter, setFilter] = useState<FilterType>({ type: "all" })
   const [searchQuery, setSearchQuery] = useState<string>("")
@@ -64,86 +62,65 @@ export function TaskProvider({ children }: { children: ReactNode }) {
 
   // Wrapper functions to maintain the same interface
   const addTask = async (taskData: Omit<Task, "id">) => {
-    console.log('🔄 TaskContext addTask START - Called with:', taskData)
-    console.log('🔄 TaskContext addTask - taskData type:', typeof taskData)
-    console.log('🔄 TaskContext addTask - taskData keys:', Object.keys(taskData))
-    console.log('🔄 TaskContext addTask - supabaseAddTask function:', supabaseAddTask)
-    
     // Check if user is authenticated
     if (!user || authLoading) {
       console.error('❌ TaskContext: User not authenticated, cannot add task')
-      throw new Error('User must be authenticated to create tasks')
+      throw new Error('User not authenticated')
     }
-    
+
     try {
-      console.log('🔄 TaskContext addTask - About to call supabaseAddTask...')
       const result = await supabaseAddTask(taskData)
-      console.log('🔄 TaskContext addTask - supabaseAddTask result:', result)
-      
-      if (!result) {
-        console.error('❌ TaskContext: addTask returned null/undefined')
-      } else {
-        console.log('✅ TaskContext: addTask successful')
-      }
-      
       return result
     } catch (error) {
-      console.error('❌ TaskContext: addTask error:', error)
+      console.error('❌ TaskContext addTask ERROR:', error)
       throw error
-    } finally {
-      console.log('🔄 TaskContext addTask END')
     }
   }
 
+  // Wrapper function for createTaskWithAssignees
   const createTaskWithAssignees = async (taskData: Omit<Task, "id">) => {
-    console.log('🔄 TaskContext createTaskWithAssignees START - Called with:', taskData)
-    
     // Check if user is authenticated
     if (!user || authLoading) {
       console.error('❌ TaskContext: User not authenticated, cannot create task')
-      throw new Error('User must be authenticated to create tasks')
+      throw new Error('User not authenticated')
     }
-    
+
     try {
-      console.log('🔄 TaskContext createTaskWithAssignees - About to call supabaseCreateTaskWithAssignees...')
       const result = await supabaseCreateTaskWithAssignees(taskData)
-      console.log('🔄 TaskContext createTaskWithAssignees - Result:', result)
-      
-      if (!result) {
-        console.error('❌ TaskContext: createTaskWithAssignees returned null/undefined')
-      } else {
-        console.log('✅ TaskContext: createTaskWithAssignees successful')
-      }
-      
       return result
     } catch (error) {
-      console.error('❌ TaskContext: createTaskWithAssignees error:', error)
+      console.error('❌ TaskContext createTaskWithAssignees ERROR:', error)
       throw error
-    } finally {
-      console.log('🔄 TaskContext createTaskWithAssignees END')
     }
   }
 
   const updateTask = async (id: string, updates: Partial<Task>) => {
     if (!user || authLoading) {
       console.error('❌ TaskContext: User not authenticated, cannot update task')
-      return null
+      throw new Error('User not authenticated')
     }
+
     try {
       const result = await supabaseUpdateTask(id, updates)
       return result
     } catch (error) {
-      console.error('❌ TaskContext: updateTask error:', error)
+      console.error('❌ TaskContext updateTask ERROR:', error)
       throw error
     }
   }
 
-  const deleteTask = (id: string) => {
+  const deleteTask = async (id: string) => {
     if (!user || authLoading) {
       console.error('❌ TaskContext: User not authenticated, cannot delete task')
-      return
+      throw new Error('User not authenticated')
     }
-    supabaseDeleteTask(id)
+
+    try {
+      await supabaseDeleteTask(id)
+    } catch (error) {
+      console.error('❌ TaskContext deleteTask ERROR:', error)
+      throw error
+    }
   }
 
   const updateSubtask = async (id: string, updates: any) => {
@@ -162,11 +139,11 @@ export function TaskProvider({ children }: { children: ReactNode }) {
 
   // Smart addSubtask wrapper that handles creation mode
   const addSubtask = async (subtaskData: any) => {
-    console.log('🚨 TaskContext addSubtask called with:', subtaskData)
+    console.log('🔄 TASK CONTEXT - addSubtask called with:', subtaskData)
     
     // Check if we're in task creation mode (temp-task-id)
     if (subtaskData.task_id === 'temp-task-id' || subtaskData.task_id?.startsWith('temp-')) {
-      console.log('🔄 CREATION MODE: Storing subtask in temporary state')
+      console.log('🏗️ TASK CONTEXT - Using temporary subtask mode')
       
       // Generate temporary ID for UI
       const tempSubtask = {
@@ -178,10 +155,13 @@ export function TaskProvider({ children }: { children: ReactNode }) {
       // Store in temporary state
       setTempSubtasks(prev => [...prev, tempSubtask])
       
+      console.log('✅ TASK CONTEXT - Created temp subtask:', tempSubtask)
       return tempSubtask
     } else {
-      console.log('🔄 EDIT MODE: Saving subtask to database')
-      return await supabaseAddSubtaskOriginal(subtaskData)
+      console.log('💾 TASK CONTEXT - Using database mode, calling supabaseAddSubtaskOriginal')
+      const result = await supabaseAddSubtaskOriginal(subtaskData)
+      console.log('📥 TASK CONTEXT - supabaseAddSubtaskOriginal result:', result)
+      return result
     }
   }
 
@@ -217,27 +197,53 @@ export function TaskProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  // Memoize the context value to prevent unnecessary re-renders
+  const contextValue = useMemo(() => ({
+    tasks,
+    filter,
+    searchQuery,
+    addTask,
+    createTaskWithAssignees,
+    updateTask,
+    deleteTask,
+    getTasksByStatus,
+    fetchTasks: supabaseFetchTasks,
+    fetchSubtasks: supabaseFetchSubtasks,
+    addSubtask,
+    updateSubtask,
+    getTempSubtasks,
+    clearTempSubtasks,
+    addComment: supabaseAddComment,
+    updateComment: supabaseUpdateComment,
+    deleteComment: supabaseDeleteComment,
+    setFilter,
+    setSearchQuery,
+    getFilteredTasks,
+  }), [
+    tasks,
+    filter,
+    searchQuery,
+    addTask,
+    createTaskWithAssignees,
+    updateTask,
+    deleteTask,
+    getTasksByStatus,
+    supabaseFetchTasks,
+    supabaseFetchSubtasks,
+    addSubtask,
+    updateSubtask,
+    getTempSubtasks,
+    clearTempSubtasks,
+    supabaseAddComment,
+    supabaseUpdateComment,
+    supabaseDeleteComment,
+    setFilter,
+    setSearchQuery,
+    getFilteredTasks,
+  ])
+
   return (
-    <TaskContext.Provider
-      value={{
-        tasks,
-        filter,
-        searchQuery,
-        addTask,
-        createTaskWithAssignees,
-        updateTask,
-        deleteTask,
-        getTasksByStatus,
-        fetchSubtasks: supabaseFetchSubtasks,
-        addSubtask,
-        updateSubtask,
-        getTempSubtasks,
-        clearTempSubtasks,
-        setFilter,
-        setSearchQuery,
-        getFilteredTasks,
-      }}
-    >
+    <TaskContext.Provider value={contextValue}>
       {children}
     </TaskContext.Provider>
   )

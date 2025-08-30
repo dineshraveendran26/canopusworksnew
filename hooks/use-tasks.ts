@@ -129,10 +129,7 @@ export interface CreateCommentData {
 }
 
 export function useTasks() {
-  console.log('🔄 useTasks START - Hook initialized')
-  
   const { user } = useAuth()
-  console.log('🔄 useTasks - useAuth result:', { user: !!user, userId: user?.id, userEmail: user?.email })
   
   const [tasks, setTasks] = useState<Task[]>([])
   const [subtasks, setSubtasks] = useState<Subtask[]>([])
@@ -140,12 +137,22 @@ export function useTasks() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   
-  console.log('🔄 useTasks - State initialized:', { tasksCount: tasks.length, loading, error })
-
   // Convert Supabase task to UI task format
-  const convertSupabaseToUITask = (supabaseTask: any): Task => {
-    // Get subtasks for this task from the subtasks state
-    const taskSubtasks = subtasks.filter((st: Subtask) => st.task_id === supabaseTask.id)
+  const convertSupabaseToUITask = useCallback((supabaseTask: any): Task => {
+    // Use subtasks from the passed parameter if available, otherwise fallback to state
+    const passedSubtasks = supabaseTask.subtasks || []
+    const taskSubtasks = passedSubtasks.length > 0 
+      ? passedSubtasks 
+      : subtasks.filter((st: Subtask) => st.task_id === supabaseTask.id)
+    
+    console.log('🔍 convertSupabaseToUITask called for task:', supabaseTask.id, 'with subtasks:', taskSubtasks.length)
+    console.log('🔍 Using subtasks from:', passedSubtasks.length > 0 ? 'parameter' : 'state')
+    
+    // Use comments from the passed parameter if available
+    const taskComments = supabaseTask.comments || []
+    
+    // Use assignees from the passed parameter if available
+    const taskAssignees = supabaseTask.assignees || []
     
     // Convert document_links to attachments format for UI
     const attachments = (supabaseTask.document_links || []).map((link: string, index: number) => ({
@@ -163,25 +170,24 @@ export function useTasks() {
       status: supabaseTask.status,
       startDate: supabaseTask.start_date,
       dueDate: supabaseTask.due_date,
-      assignees: [], // Will be populated separately via fetchTaskAssignments
-      subtasks: taskSubtasks.map((subtask: Subtask) => ({
+      assignees: taskAssignees,
+      subtasks: taskSubtasks.map((subtask: any) => ({
         ...subtask,
         startDate: subtask.startDate || undefined,
         endDate: subtask.endDate || undefined,
-        assignees: subtask.assignees || [] // Ensure assignees array exists
-      })), // Include actual subtasks with assignees
-      comments: [], // Will be populated separately
+        assignees: subtask.assignees || [], // Ensure assignees array exists
+        comments: subtask.comments || [] // Ensure comments array exists
+      })),
+      comments: taskComments,
       department: supabaseTask.department,
       attachments: attachments,
       documentLinks: supabaseTask.document_links || []
     }
-  }
+  }, [subtasks]) // Add dependency array for useCallback
 
   // Check database schema to see what columns exist
   const checkDatabaseSchema = async () => {
     try {
-      console.log('🔄 Checking database schema...')
-      
       // Try to get the table info
       const { data: tableInfo, error: tableError } = await supabase
         .from('tasks')
@@ -192,9 +198,6 @@ export function useTasks() {
         console.error('❌ Error checking table schema:', tableError)
         return
       }
-      
-      console.log('✅ Table schema check successful')
-      console.log('🔄 Table info:', tableInfo)
       
     } catch (error) {
       console.error('❌ Error in checkDatabaseSchema:', error)
@@ -210,14 +213,11 @@ export function useTasks() {
 
   // Convert UI task to Supabase format using improved utilities
   const convertUIToSupabaseTask = (uiTask: Omit<Task, "id">): CreateTaskData => {
-    console.log('🔄 convertUIToSupabaseTask called with:', uiTask)
     
     if (!user) {
       console.error('❌ No user in convertUIToSupabaseTask')
       throw new Error('User must be authenticated to create tasks')
     }
-    
-    console.log('🔄 Converting UI task to Supabase format using new utilities...')
     
     // Validate required fields first
     const requiredFields = ['title'];
@@ -241,8 +241,6 @@ export function useTasks() {
       documentLinks: uiTask.documentLinks || [] // Pass document links
     });
     
-    console.log('🔄 Mapped data using utilities:', mappedData);
-    
     // Convert to CreateTaskData format
     const supabaseTaskData: CreateTaskData = {
       title: mappedData.title || '',
@@ -256,15 +254,11 @@ export function useTasks() {
       document_links: mappedData.document_links || undefined
     };
     
-    console.log('🔄 Final supabaseTaskData:', supabaseTaskData);
-    console.log('🔄 Final supabaseTaskData keys:', Object.keys(supabaseTaskData));
-    
     return supabaseTaskData;
   }
 
   // New function to create task with proper multiple assignee support
   const createTaskWithAssignees = async (uiTask: Omit<Task, "id">): Promise<Task | null> => {
-    console.log('🚀 createTaskWithAssignees called with:', uiTask)
     
     if (!user) {
       console.error('❌ No user in createTaskWithAssignees')
@@ -294,7 +288,6 @@ export function useTasks() {
       
       // Now handle multiple assignees using the new assignment system
       if (uiTask.assignees && uiTask.assignees.length > 0) {
-        console.log('🔄 Assigning users to task:', uiTask.assignees)
         
         // Create assignments in the task_assignments table
         const assignments = uiTask.assignees.map(userId => ({
@@ -326,7 +319,6 @@ export function useTasks() {
       // Note: Task will be added to state via real-time subscription to prevent duplicates
       // setTasks(prev => [uiTaskData, ...prev]) // Removed to prevent duplicates
       
-      console.log('✅ Task created successfully with assignees')
       return uiTaskData
       
     } catch (error) {
@@ -339,20 +331,17 @@ export function useTasks() {
   }
 
   // Fetch all tasks
-  const fetchTasks = async () => {
+  const fetchTasks = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
 
       // Check if user is authenticated
       if (!user) {
-        console.log('⚠️ User not authenticated, skipping task fetch')
         setTasks([])
         setLoading(false)
         return
       }
-
-      console.log('🔄 Fetching tasks for user:', user.id)
 
       const { data, error: fetchError } = await supabase
         .from('tasks')
@@ -365,25 +354,77 @@ export function useTasks() {
         return
       }
 
-      console.log('✅ Tasks fetched successfully:', data?.length || 0, 'tasks')
-
       // First fetch all subtasks and assignments for all tasks
-      if (data && data.length > 0) {
-        console.log('🔄 Fetching subtasks and assignments for all tasks...')
+      const taskIds = data?.map((task: any) => task.id) || []
+      
+      // Fetch comments for all tasks
+      let allComments: Comment[] = []
+      if (taskIds.length > 0) {
+        // First, get all subtask IDs for these tasks
+        const { data: subtaskData, error: subtaskError } = await supabase
+          .from('subtasks')
+          .select('id')
+          .in('task_id', taskIds)
+
+        const subtaskIds = subtaskData?.map((s: any) => s.id) || []
+
+        // Now fetch comments for both tasks and subtasks in separate queries
+        const [taskCommentsResult, subtaskCommentsResult] = await Promise.all([
+          // Task comments
+          supabase
+            .from('comments')
+            .select(`
+              *,
+              users!comments_author_id_fkey(id, email, full_name)
+            `)
+            .in('task_id', taskIds)
+            .is('subtask_id', null)
+            .order('created_at', { ascending: false }),
+          
+          // Subtask comments (only if there are subtasks)
+          subtaskIds.length > 0 ? supabase
+            .from('comments')
+            .select(`
+              *,
+              users!comments_author_id_fkey(id, email, full_name)
+            `)
+            .in('subtask_id', subtaskIds)
+            .is('task_id', null)
+            .order('created_at', { ascending: false }) : { data: [], error: null }
+        ])
+
+        if (taskCommentsResult.error) {
+          console.error('❌ Error fetching task comments:', taskCommentsResult.error)
+        }
         
+        if (subtaskCommentsResult.error) {
+          console.error('❌ Error fetching subtask comments:', subtaskCommentsResult.error)
+        }
+
+        // Combine all comments
+        allComments = [
+          ...(taskCommentsResult.data || []),
+          ...(subtaskCommentsResult.data || [])
+        ]
+      }
+
+      if (data && data.length > 0) {
         // Batch fetch all subtasks for all tasks in one query
-        const taskIds = data.map((task: any) => task.id)
         const { data: allSubtasksData, error: subtasksError } = await supabase
           .from('subtasks')
           .select('*')
           .in('task_id', taskIds)
           .order('order_index', { ascending: true })
 
+        console.log('🔍 Subtask fetch result:', { 
+          subtasksData: allSubtasksData?.length || 0, 
+          taskIds, 
+          error: subtasksError 
+        })
+
         if (subtasksError) {
           console.error('Error fetching all subtasks:', subtasksError)
         } else {
-          console.log('✅ Fetched all subtasks:', allSubtasksData?.length || 0)
-          
           // Batch fetch all subtask assignments in one query
           const subtaskIds = allSubtasksData?.map((st: any) => st.id) || []
           let allSubtaskAssignments: any[] = []
@@ -396,7 +437,6 @@ export function useTasks() {
             
             if (!assignmentsError && assignmentsData) {
               allSubtaskAssignments = assignmentsData
-              console.log('✅ Fetched all subtask assignments:', assignmentsData.length)
             }
           }
           
@@ -415,6 +455,8 @@ export function useTasks() {
           })
           
           // Set all subtasks at once
+          console.log('🔍 Setting subtasks in state:', processedSubtasks.length, 'subtasks')
+          console.log('🔍 Sample subtask:', processedSubtasks[0])
           setSubtasks(processedSubtasks)
           
           // Batch fetch all task assignments in one query
@@ -425,8 +467,6 @@ export function useTasks() {
           
           if (taskAssignmentsError) {
             console.error('Error fetching all task assignments:', taskAssignmentsError)
-          } else {
-            console.log('✅ Fetched all task assignments:', allTaskAssignments?.length || 0)
           }
           
           // Now convert tasks to UI format with all data available
@@ -434,10 +474,50 @@ export function useTasks() {
             const taskSubtasks = processedSubtasks?.filter((st: any) => st.task_id === task.id) || []
             const taskAssignees = allTaskAssignments?.filter((ta: any) => ta.task_id === task.id).map((ta: any) => ta.team_member_id) || []
             
+            // Attach comments to task
+            const taskComments = allComments.filter(comment => comment.task_id === task.id).map(comment => {
+              return {
+                id: comment.id,
+                author: {
+                  id: comment.author_id,
+                  name: (comment as any).users?.full_name || (comment as any).users?.email || 'Unknown User',
+                  initials: ((comment as any).users?.full_name || (comment as any).users?.email || 'U').split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2),
+                  email: (comment as any).users?.email
+                },
+                content: comment.content,
+                timestamp: new Date(comment.created_at),
+                editedAt: comment.updated_at !== comment.created_at ? new Date(comment.updated_at) : undefined,
+                uploadStatus: 'success' as const
+              }
+            })
+            
+            // Attach comments to subtasks
+            const subtasksWithComments = taskSubtasks.map((subtask: any) => {
+              const subtaskComments = allComments.filter(comment => comment.subtask_id === subtask.id).map(comment => ({
+                id: comment.id,
+                content: comment.content, // Fix: Use 'content' instead of 'text' to match UI format
+                author: {
+                  id: comment.author_id,
+                  name: (comment as any).users?.full_name || (comment as any).users?.email || 'Unknown User',
+                  initials: ((comment as any).users?.full_name || (comment as any).users?.email || 'U').split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2),
+                  email: (comment as any).users?.email
+                },
+                timestamp: new Date(comment.created_at),
+                editedAt: comment.updated_at !== comment.created_at ? new Date(comment.updated_at) : undefined,
+                uploadStatus: 'success' as const
+              }))
+              
+              return {
+                ...subtask,
+                comments: subtaskComments
+              }
+            })
+            
             return convertSupabaseToUITask({
               ...task,
-              subtasks: taskSubtasks,
-              assignees: taskAssignees
+              subtasks: subtasksWithComments,
+              assignees: taskAssignees,
+              comments: taskComments
             })
           })
           
@@ -457,10 +537,10 @@ export function useTasks() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user])
 
   // Fetch subtasks for a specific task with assignees
-  const fetchSubtasks = async (taskId: string) => {
+  const fetchSubtasks = useCallback(async (taskId: string) => {
     try {
       // First fetch subtasks
       const { data: subtasksData, error: subtasksError } = await supabase
@@ -476,10 +556,11 @@ export function useTasks() {
 
       // Then fetch assignees for each subtask
       const subtasksWithAssignees = await Promise.all(
-        (subtasksData || []).map(async (subtask) => {
+        (subtasksData || []).map(async (subtask: any) => {
           const { data: assigneesData, error: assigneesError } = await supabase
             .from('subtask_assignments')
-            .select('team_member_id') // Changed from user_id to team_member_id
+            .select('team_member_id')
+            .eq('subtask_id', subtask.id) // Fix: Add this filter to get only assignees for this specific subtask
 
           if (assigneesError) {
             console.warn('Error fetching subtask assignees:', assigneesError)
@@ -502,10 +583,10 @@ export function useTasks() {
     } catch (err) {
       console.error('Error in fetchSubtasks:', err)
     }
-  }
+  }, [])
 
   // Fetch task assignments for a specific task
-  const fetchTaskAssignments = async (taskId: string): Promise<string[]> => {
+  const fetchTaskAssignments = useCallback(async (taskId: string): Promise<string[]> => {
     try {
       const { data, error: fetchError } = await supabase
         .from('task_assignments')
@@ -521,10 +602,10 @@ export function useTasks() {
       console.error('Error in fetchTaskAssignments:', err)
       return []
     }
-  }
+  }, [])
 
   // Fetch comments for a specific task or subtask
-  const fetchComments = async (taskId?: string, subtaskId?: string) => {
+  const fetchComments = useCallback(async (taskId?: string, subtaskId?: string) => {
     try {
       let query = supabase.from('comments').select('*')
       
@@ -550,27 +631,12 @@ export function useTasks() {
     } catch (err) {
       console.error('Error in fetchComments:', err)
     }
-  }
+  }, [])
 
   // Add a new task
   const addTask = async (taskData: Omit<Task, "id">): Promise<Task | null> => {
     try {
-      console.log('🔄 addTask called with:', taskData)
-      console.log('🔄 taskData type:', typeof taskData)
-      console.log('🔄 taskData keys:', Object.keys(taskData))
-      console.log('🔄 taskData.title:', taskData.title)
-      console.log('🔄 taskData.description:', taskData.description)
-      console.log('🔄 taskData.status:', taskData.status)
-      console.log('🔄 taskData.priority:', taskData.priority)
-      console.log('🔄 taskData.department:', taskData.department)
-      console.log('🔄 taskData.assignees:', taskData.assignees)
-      
       // Check authentication status
-      console.log('🔄 Checking authentication...')
-      console.log('🔄 user object:', user)
-      console.log('🔄 user.id:', user?.id)
-      console.log('🔄 user.email:', user?.email)
-      
       if (!user) {
         console.error('❌ No authenticated user found')
         setError('You must be logged in to create tasks')
@@ -578,10 +644,7 @@ export function useTasks() {
       }
       
       // Check Supabase session
-      console.log('🔄 Checking Supabase session...')
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-      console.log('🔄 Session data:', session)
-      console.log('🔄 Session error:', sessionError)
       
       if (!session) {
         console.error('❌ No Supabase session found')
@@ -603,15 +666,7 @@ export function useTasks() {
       setError(null)
 
       // Convert UI task to Supabase format
-      console.log('🔄 About to call convertUIToSupabaseTask...')
-      console.log('🔄 Input to convertUIToSupabaseTask:', taskData)
-      
       const supabaseTaskData = convertUIToSupabaseTask(taskData)
-      console.log('🔄 Converted to Supabase format:', supabaseTaskData)
-      console.log('🔄 supabaseTaskData type:', typeof supabaseTaskData)
-      console.log('🔄 supabaseTaskData keys:', Object.keys(supabaseTaskData))
-      console.log('🔄 supabaseTaskData.title:', supabaseTaskData.title)
-      console.log('🔄 supabaseTaskData.created_by:', supabaseTaskData.created_by)
       
       // Validate converted data
       if (!supabaseTaskData.title || supabaseTaskData.title.trim() === '') {
@@ -619,12 +674,6 @@ export function useTasks() {
         setError('Invalid task data')
         return null
       }
-
-      console.log('🔄 About to insert into Supabase...')
-      console.log('🔄 Inserting data:', JSON.stringify(supabaseTaskData, null, 2))
-      console.log('🔄 Data type:', typeof supabaseTaskData)
-      console.log('🔄 Data keys:', Object.keys(supabaseTaskData))
-      console.log('🔄 Data values:', Object.values(supabaseTaskData))
 
       const { data, error: insertError } = await supabase
         .from('tasks')
@@ -681,14 +730,10 @@ export function useTasks() {
         return null;
       }
 
-      console.log('✅ Task inserted successfully:', data)
-
       // Convert back to UI format and add to state
       const newUITask = convertSupabaseToUITask(data)
-      console.log('🔄 Converted back to UI format:', newUITask)
       
       setTasks(prev => [newUITask, ...prev])
-      console.log('✅ Task added to local state')
       
       return newUITask
     } catch (err) {
@@ -829,21 +874,26 @@ export function useTasks() {
   // Add a subtask
   const addSubtask = async (subtaskData: CreateSubtaskData): Promise<Subtask | null> => {
     try {
+      console.log('💾 USE-TASKS - addSubtask called with data:', subtaskData)
+      
       const { data, error: insertError } = await supabase
         .from('subtasks')
         .insert([subtaskData])
         .select()
         .single()
 
+      console.log('📡 USE-TASKS - Supabase response:', { data, error: insertError })
+
       if (insertError) {
-        console.error('Error adding subtask:', insertError)
+        console.error('❌ USE-TASKS - Error adding subtask:', insertError)
         return null
       }
 
+      console.log('✅ USE-TASKS - Subtask added successfully:', data)
       setSubtasks(prev => [...prev, data])
       return data
     } catch (err) {
-      console.error('Error in addSubtask:', err)
+      console.error('❌ USE-TASKS - Error in addSubtask:', err)
       return null
     }
   }
@@ -894,7 +944,21 @@ export function useTasks() {
 
   // Add a comment
   const addComment = async (commentData: CreateCommentData): Promise<Comment | null> => {
+    console.log('🔄 addComment called with data:', commentData)
+    console.log('📊 Data validation:', {
+      hasContent: !!commentData.content,
+      contentLength: commentData.content?.length,
+      hasAuthorId: !!commentData.author_id,
+      authorId: commentData.author_id,
+      hasTaskId: !!commentData.task_id,
+      taskId: commentData.task_id,
+      hasSubtaskId: !!commentData.subtask_id,
+      subtaskId: commentData.subtask_id,
+      isInternal: commentData.is_internal
+    })
+    
     try {
+      console.log('💾 Inserting comment into database...')
       const { data, error: insertError } = await supabase
         .from('comments')
         .insert([commentData])
@@ -902,14 +966,21 @@ export function useTasks() {
         .single()
 
       if (insertError) {
-        console.error('Error adding comment:', insertError)
+        console.error('❌ Error adding comment:', insertError)
+        console.error('❌ Error code:', insertError.code)
+        console.error('❌ Error message:', insertError.message)
+        console.error('❌ Error details:', insertError.details)
+        console.error('❌ Error hint:', insertError.hint)
         return null
       }
 
+      console.log('✅ Comment inserted successfully:', data)
       setComments(prev => [...prev, data])
       return data
     } catch (err) {
-      console.error('Error in addComment:', err)
+      console.error('❌ Error in addComment:', err)
+      console.error('❌ Error type:', typeof err)
+      console.error('❌ Error toString:', err?.toString())
       return null
     }
   }
@@ -1007,10 +1078,8 @@ export function useTasks() {
   useEffect(() => {
     // Only fetch tasks if user is authenticated
     if (user) {
-      console.log('🔄 User authenticated, fetching tasks...')
       fetchTasks()
     } else {
-      console.log('⚠️ User not authenticated, clearing tasks')
       setTasks([])
       setSubtasks([])
       setComments([])
@@ -1025,14 +1094,15 @@ export function useTasks() {
         (payload) => {
           if (payload.eventType === 'INSERT') {
             // Check if task already exists to prevent duplicates
-            const existingTask = tasks.find(task => task.id === payload.new.id)
-            if (!existingTask) {
-              const newUITask = convertSupabaseToUITask(payload.new as SupabaseTask)
-              console.log('🔄 Adding new task via real-time:', newUITask.id, newUITask.title)
-              setTasks(prev => [newUITask, ...prev])
-            } else {
-              console.log('⚠️ Duplicate task detected, skipping:', payload.new.id, payload.new.title)
-            }
+            setTasks(prev => {
+              const existingTask = prev.find(task => task.id === payload.new.id)
+              if (!existingTask) {
+                const newUITask = convertSupabaseToUITask(payload.new as SupabaseTask)
+                return [newUITask, ...prev]
+              } else {
+                return prev
+              }
+            })
           } else if (payload.eventType === 'UPDATE') {
             const updatedUITask = convertSupabaseToUITask(payload.new as SupabaseTask)
             setTasks(prev => prev.map(task => task.id === payload.new.id ? updatedUITask : task))
@@ -1051,17 +1121,20 @@ export function useTasks() {
         { event: '*', schema: 'public', table: 'subtasks' },
         (payload) => {
           if (payload.eventType === 'INSERT') {
-            // Check if subtask already exists to prevent duplicates
-            const existingSubtask = subtasks.find(subtask => subtask.id === payload.new.id)
-            if (!existingSubtask) {
-              const newSubtask = {
-                ...payload.new,
-                startDate: payload.new.start_date ? new Date(payload.new.start_date) : undefined,
-                endDate: payload.new.end_date ? new Date(payload.new.end_date) : undefined,
-                assignees: [] // Will be populated separately
-              } as Subtask
-              setSubtasks(prev => [...prev, newSubtask])
-            }
+            setSubtasks(prev => {
+              // Check if subtask already exists to prevent duplicates
+              const existingSubtask = prev.find(subtask => subtask.id === payload.new.id)
+              if (!existingSubtask) {
+                const newSubtask = {
+                  ...payload.new,
+                  startDate: payload.new.start_date ? new Date(payload.new.start_date) : undefined,
+                  endDate: payload.new.end_date ? new Date(payload.new.end_date) : undefined,
+                  assignees: [] // Will be populated separately
+                } as Subtask
+                return [...prev, newSubtask]
+              }
+              return prev
+            })
           } else if (payload.eventType === 'UPDATE') {
             const updatedSubtask = {
               ...payload.new,
@@ -1085,11 +1158,14 @@ export function useTasks() {
         { event: '*', schema: 'public', table: 'comments' },
         (payload) => {
           if (payload.eventType === 'INSERT') {
-            // Check if comment already exists to prevent duplicates
-            const existingComment = comments.find(comment => comment.id === payload.new.id)
-            if (!existingComment) {
-              setComments(prev => [...prev, payload.new as Comment])
-            }
+            setComments(prev => {
+              // Check if comment already exists to prevent duplicates
+              const existingComment = prev.find(comment => comment.id === payload.new.id)
+              if (!existingComment) {
+                return [...prev, payload.new as Comment]
+              }
+              return prev
+            })
           } else if (payload.eventType === 'UPDATE') {
             setComments(prev => prev.map(comment => comment.id === payload.new.id ? payload.new as Comment : comment))
           } else if (payload.eventType === 'DELETE') {
@@ -1104,7 +1180,7 @@ export function useTasks() {
       supabase.removeChannel(subtasksChannel)
       supabase.removeChannel(commentsChannel)
     }
-  }, [user]) // Add user as dependency
+  }, [user?.id, fetchTasks]) // Add fetchTasks to dependencies
 
   return {
     // State

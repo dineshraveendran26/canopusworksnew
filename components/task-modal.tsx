@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useTaskContext } from "@/contexts/task-context"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
@@ -21,6 +21,7 @@ import { CommentsSection } from "@/components/comments-section"
 import { useTeamMembers } from "@/hooks/use-team-members"
 import { useTaskAssignments } from "@/hooks/use-task-assignments"
 import type { Task } from "@/hooks/use-tasks"
+import { supabase } from "@/lib/supabase"
 
 interface TaskModalProps {
   open: boolean
@@ -41,11 +42,7 @@ interface TaskFormData {
 }
 
 export function TaskModal({ open, onOpenChange, task, mode = "create" }: TaskModalProps) {
-  console.log('🔄 TaskModal rendered with:', { open, mode, task })
-  
-  const { addTask, createTaskWithAssignees, updateTask, deleteTask, fetchSubtasks, addSubtask } = useTaskContext()
-  console.log('🔄 TaskModal useTaskContext result:', { addTask: !!addTask, updateTask: !!updateTask, deleteTask: !!deleteTask })
-  
+  const { addTask, createTaskWithAssignees, updateTask, deleteTask, fetchTasks, fetchSubtasks, addSubtask, addComment } = useTaskContext()
   const { teamMembers, loading: teamMembersLoading } = useTeamMembers()
   const { updateTaskAssignments, loading: assignmentLoading } = useTaskAssignments()
 
@@ -60,7 +57,49 @@ export function TaskModal({ open, onOpenChange, task, mode = "create" }: TaskMod
   })
 
   const [subtasks, setSubtasks] = useState(task?.subtasks || [])
-  const [comments, setComments] = useState(task?.comments || [])
+  
+  // Debug wrapper for setSubtasks
+  const debugSetSubtasks = (newSubtasks: any) => {
+    console.log('📝 TASK MODAL - setSubtasks called with:', newSubtasks.length, 'subtasks')
+    console.log('📋 TASK MODAL - Subtasks:', newSubtasks.map((st: any) => ({ id: st.id, title: st.title })))
+    setSubtasks(newSubtasks)
+  }
+  const [comments, setCommentsState] = useState(task?.comments || [])
+  
+  // Safe comments setter that prevents overriding temporary comments
+  const setComments = useCallback((newComments: any[]) => {
+    setCommentsState(currentComments => {
+      // Allow updates if:
+      // 1. No temporary comments exist, OR
+      // 2. The update is converting temporary comments to permanent ones (same or more comments with real IDs)
+      const currentTempComments = currentComments.filter((c: any) => 
+        c.uploadStatus === 'uploading' || c.id?.startsWith('temp-comment-')
+      )
+      
+      // If no temporary comments, always allow update
+      if (currentTempComments.length === 0) {
+        console.log('✅ Safe comment update (no temp comments):', newComments.length, 'comments')
+        return newComments
+      }
+      
+      // If we have temporary comments, check if this update is resolving them
+      const newCommentCount = newComments.length
+      const currentCommentCount = currentComments.length
+      const newHasRealIds = newComments.every((c: any) => !c.id?.startsWith('temp-comment-'))
+      
+      // Allow update if we're converting temp comments to real ones
+      if (newCommentCount >= currentCommentCount && newHasRealIds) {
+        console.log('✅ Safe comment update (temp->real conversion):', newComments.length, 'comments')
+        return newComments
+      }
+      
+      // Block updates that would remove temporary comments inappropriately
+      console.log('⚠️ Skipping comment update - would remove temporary comments inappropriately')
+      console.log('Current comments:', currentComments.map((c: any) => ({ id: c.id, status: c.uploadStatus })))
+      console.log('New comments:', newComments.map((c: any) => ({ id: c.id, status: c.uploadStatus })))
+      return currentComments // Keep current comments
+    })
+  }, [])
   const [attachments, setAttachments] = useState(task?.attachments || [])
   const [selectedAssignees, setSelectedAssignees] = useState<string[]>([])
   const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false)
@@ -68,18 +107,63 @@ export function TaskModal({ open, onOpenChange, task, mode = "create" }: TaskMod
   const [showAttachmentPopup, setShowAttachmentPopup] = useState(false)
   const [assigneeSearchTerm, setAssigneeSearchTerm] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [hasInitialized, setHasInitialized] = useState(false)
+  const [commentsLoaded, setCommentsLoaded] = useState(false)
 
   const [attachmentForm, setAttachmentForm] = useState({
     description: "",
     link: "",
   })
 
+  // Function to load comments for a specific task
+  const loadTaskComments = useCallback(async (taskId: string) => {
+    try {
+      console.log('🔄 Loading comments for task:', taskId)
+      console.log('🔄 STACK TRACE:', new Error().stack)
+      
+      // Fetch comments for this specific task
+      const { data: commentsData, error: commentsError } = await supabase
+        .from('comments')
+        .select(`
+          *,
+          users!comments_author_id_fkey(id, email, full_name)
+        `)
+        .eq('task_id', taskId)
+        .is('subtask_id', null)
+        .order('created_at', { ascending: true })
+
+      if (commentsError) {
+        console.error('❌ Error loading task comments:', commentsError)
+        return
+      }
+
+      console.log('✅ Loaded comments:', commentsData?.length || 0, 'comments')
+      
+      // Convert database comments to UI format
+      const uiComments = (commentsData || []).map((comment: any) => ({
+        id: comment.id,
+        author: {
+          id: comment.author_id,
+          name: comment.users?.full_name || comment.users?.email || 'Unknown User',
+          initials: (comment.users?.full_name || comment.users?.email || 'U').split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2),
+          email: comment.users?.email
+        },
+        content: comment.content,
+        timestamp: new Date(comment.created_at),
+        editedAt: comment.updated_at !== comment.created_at ? new Date(comment.updated_at) : undefined,
+        uploadStatus: 'success' as const
+      }))
+
+      setComments(uiComments)
+      console.log('✅ Comments state updated via loadTaskComments:', uiComments)
+      
+    } catch (error) {
+      console.error('❌ Error in loadTaskComments:', error)
+    }
+  }, [])
+
   // Function to reset all form state to defaults
-  const resetFormState = () => {
-    console.log('🔄 Resetting form state to defaults')
-    console.log('🔍 Current formData before reset:', formData)
-    console.log('🔍 Current subtasks before reset:', subtasks.length)
-    
+  const resetFormState = useCallback(() => {
     setFormData({
       title: "",
       description: "",
@@ -99,79 +183,88 @@ export function TaskModal({ open, onOpenChange, task, mode = "create" }: TaskMod
     })
     setError(null)
     setAssigneeSearchTerm("")
-    console.log('✅ Form state reset complete - state updates queued')
-  }
+  }, [])
 
+  // Track the current task ID to detect task changes
+  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null)
+  
   // Load current assignees when editing a task OR reset when creating new task
   useEffect(() => {
+    // Reset comments loaded flag when switching to a different task
+    if (task?.id !== currentTaskId) {
+      setCommentsLoaded(false)
+      setCurrentTaskId(task?.id || null)
+    }
+    
     if (task && mode === "edit") {
       const assignees = task.assignees || []
       // Ensure no duplicates
       const uniqueAssignees = [...new Set(assignees)]
-      console.log('🔄 Loading assignees from task:', uniqueAssignees)
       setSelectedAssignees(uniqueAssignees)
       
       // Load subtasks and comments from the task
+      console.log('🔄 TASK MODAL - Syncing subtasks from task object:', task.subtasks?.length || 0)
       if (task.subtasks) {
-        console.log('🔄 Loading subtasks from task:', task.subtasks.length, 'subtasks')
         setSubtasks(task.subtasks)
       }
       
-      if (task.comments) {
-        console.log('🔄 Loading comments from task:', task.comments.length, 'comments')
-        setComments(task.comments)
+      // Use comments from task if available, otherwise fetch from database
+      // Only load comments if they haven't been loaded yet to prevent overriding user additions
+      if (!commentsLoaded) {
+        setCommentsLoaded(true) // Set flag immediately to prevent multiple loads
+        if (task.comments && task.comments.length > 0) {
+          console.log('🔄 Using comments from task object:', task.comments.length)
+          setComments(task.comments)
+        } else if (task.id) {
+          console.log('🔄 No comments in task object, fetching from database')
+          loadTaskComments(task.id)
+        }
+      } else {
+        console.log('🔄 Comments already loaded, skipping reset to preserve user additions')
       }
-    } else if (mode === "create") {
-      // Reset form when opening in create mode
-      console.log('🔄 Opening in create mode - resetting form')
-      console.log('🔍 Form data before reset:', formData)
+    } else if (mode === "create" && open && !hasInitialized) {
+      // Reset form ONLY when modal first opens in create mode, not on every re-render
+      console.log('🔄 TASK MODAL - Resetting form for new task creation')
       resetFormState()
-      console.log('🔍 Form data after reset:', formData)
+      setHasInitialized(true)
     }
-  }, [task, mode])
+  }, [task, mode, open]) // Removed loadTaskComments and resetFormState from dependencies
 
   // Refresh subtasks when modal opens in edit mode
   useEffect(() => {
     if (open && task && mode === "edit" && fetchSubtasks) {
-      console.log('🔄 Modal opened, refreshing subtasks for task:', task.id)
-      fetchSubtasks(task.id)
+      console.log('🔄 TASK MODAL - Fetching fresh subtasks from database...')
+      fetchSubtasks(task.id).then(() => {
+        console.log('✅ TASK MODAL - Subtasks fetched successfully')
+        // Note: We don't need to update local state here because
+        // the parent task object should be updated with the latest subtasks
+        // and the modal will re-render with the updated task.subtasks
+      })
     }
   }, [open, task, mode, fetchSubtasks])
 
   const handleSubmit = async (e: React.FormEvent) => {
-    console.log('🔄 handleSubmit START - Event:', e)
     e.preventDefault()
     
     // Clear any previous errors
     setError(null)
     
-    console.log('🔄 TaskModal handleSubmit called')
-    console.log('📝 Mode:', mode)
-    console.log('📊 Form Data:', formData)
-    console.log('👥 Selected Assignees:', selectedAssignees)
-    console.log('📋 Subtasks:', subtasks)
-
     // Validate required fields
     if (!formData.title.trim()) {
-      console.error('❌ Task title is required')
       setError('Task title is required')
       return
     }
 
     if (!formData.department) {
-      console.error('❌ Department is required')
       setError('Department is required')
       return
     }
 
-    console.log('🔄 Building taskData object...')
-    
     // Process attachments for database storage
     const documentLinks = attachments.map(att => att.link).filter(link => link.trim() !== '')
     
     // Ensure assignees are unique
     const uniqueAssignees = [...new Set(selectedAssignees)]
-    console.log('🔄 Final assignees (ensured unique):', uniqueAssignees)
     
     const taskData = {
       title: formData.title.trim(),
@@ -188,28 +281,19 @@ export function TaskModal({ open, onOpenChange, task, mode = "create" }: TaskMod
       documentLinks, // Add processed document links for database
     }
 
-    console.log('🚀 Final Task Data:', taskData)
-    console.log('🚀 taskData.title:', taskData.title)
-    console.log('🚀 taskData.description:', taskData.description)
-    console.log('🚀 taskData.status:', taskData.status)
-    console.log('🚀 taskData.priority:', taskData.priority)
-    console.log('🚀 taskData.department:', taskData.department)
-    console.log('🚀 taskData.assignees:', taskData.assignees)
-    console.log('🚀 taskData.subtasks:', taskData.subtasks)
-    console.log('🚀 taskData.comments:', taskData.comments)
-    console.log('🚀 taskData.attachments:', taskData.attachments)
-
     if (mode === "create") {
-      console.log('➕ Creating new task...')
-      console.log('🔄 About to call createTaskWithAssignees with:', taskData)
-      
       try {
+        console.log('🆕 TASK CREATION - Starting task creation process...')
+        console.log('📋 TASK CREATION - Task data:', taskData)
+        console.log('🔍 TASK CREATION - Subtasks to create:', subtasks.length)
+        console.log('📝 TASK CREATION - Subtasks:', subtasks.map(st => ({ id: st.id, title: st.title })))
+        
         // Create task first (without subtasks)
         const result = await createTaskWithAssignees(taskData)
-        console.log('🔄 createTaskWithAssignees call result:', result)
+        console.log('✅ TASK CREATION - Task created:', result?.id)
         
         if (result && subtasks.length > 0) {
-          console.log('🔄 Task created, now creating subtasks...')
+          console.log('🔄 TASK CREATION - Creating subtasks for task:', result.id)
           
           // NEW: Create subtasks after task creation
           const subtaskPromises = subtasks.map(async (subtask, index) => {
@@ -223,71 +307,128 @@ export function TaskModal({ open, onOpenChange, task, mode = "create" }: TaskMod
               created_by: null
             }
             
-            console.log('🔄 Creating subtask for new task:', subtaskData)
-            return await addSubtask(subtaskData)
+            console.log('💾 TASK CREATION - Calling addSubtask with:', subtaskData)
+            const subtaskResult = await addSubtask(subtaskData)
+            console.log('📥 TASK CREATION - addSubtask result:', subtaskResult)
+            return subtaskResult
           })
           
           try {
-            await Promise.all(subtaskPromises)
-            console.log('✅ All subtasks created successfully')
+            const createdSubtasks = await Promise.all(subtaskPromises)
+            console.log('📋 TASK CREATION - All subtasks created:', createdSubtasks.length)
+            console.log('📝 TASK CREATION - Created subtasks:', createdSubtasks)
+            
+            // NEW: Save subtask comments after subtasks are created
+            const subtaskCommentPromises = []
+            for (let i = 0; i < subtasks.length; i++) {
+              const originalSubtask = subtasks[i]
+              const createdSubtask = createdSubtasks[i]
+              
+              if (originalSubtask.comments && originalSubtask.comments.length > 0 && createdSubtask) {
+                
+                const commentPromises = originalSubtask.comments.map(async (comment: any) => {
+                  const commentData = {
+                    subtask_id: createdSubtask.id, // Real subtask ID now available
+                    content: comment.text || comment.content,
+                    author_id: comment.author?.id || comment.author, // Handle both structures
+                    is_internal: false
+                  }
+                  
+                  return await addComment(commentData)
+                })
+                
+                subtaskCommentPromises.push(...commentPromises)
+              }
+            }
+            
+            if (subtaskCommentPromises.length > 0) {
+              try {
+                await Promise.all(subtaskCommentPromises)
+              } catch (commentError) {
+                console.error('❌ Error saving subtask comments:', commentError)
+                setError('Task created but some subtask comments failed to save.')
+              }
+            }
+            
           } catch (subtaskError) {
             console.error('❌ Error creating subtasks:', subtaskError)
             // Task is created, but show warning about subtasks
             setError('Task created but some subtasks failed to save. Please edit the task to add them.')
           }
         }
+
+        // NEW: Save task-level comments after task creation
+        if (result && comments.length > 0) {
+          
+          const commentPromises = comments.map(async (comment) => {
+            const commentData = {
+              task_id: result.id, // Real task ID now available
+              content: comment.content,
+              author_id: comment.author.id,
+              is_internal: false
+            }
+            
+            return await addComment(commentData)
+          })
+          
+          try {
+            await Promise.all(commentPromises)
+          } catch (commentError) {
+            console.error('❌ Error saving task comments:', commentError)
+            // Task is created, but show warning about comments
+            setError('Task created but some comments failed to save.')
+          }
+                }
         
         if (result) {
-          console.log('✅ Task and subtasks created successfully')
+          // If we created subtasks, we need to refresh the task data to include them
+          if (subtasks.length > 0) {
+            console.log('🔄 TASK CREATION - Refreshing task data to include new subtasks...')
+            // Give a moment for the database transactions to complete
+            await new Promise(resolve => setTimeout(resolve, 500))
+            // Explicitly refresh the task list to ensure new subtasks are included
+            await fetchTasks()
+            console.log('✅ TASK CREATION - Task list refreshed')
+          }
+          
           resetFormState() // Reset form state before closing
+          setHasInitialized(false) // Reset initialization flag
+          setCommentsLoaded(false) // Reset comments loaded flag
           onOpenChange(false)
         } else {
-          console.error('❌ Task creation failed')
           setError('Failed to create task. Please try again.')
         }
         
       } catch (error) {
-        console.error('❌ Error creating task:', error)
         setError(error instanceof Error ? error.message : 'An unexpected error occurred')
       }
     } else if (mode === "edit" && task) {
-      console.log('✏️ Updating existing task...')
       try {
         // Update the task first
         const result = await updateTask(task.id, taskData)
         if (result) {
-          console.log('✅ Task updated successfully')
           
           // Update assignments separately
           if (JSON.stringify(selectedAssignees.sort()) !== JSON.stringify((task.assignees || []).sort())) {
-            console.log('🔄 Updating task assignments...')
             const assignmentResult = await updateTaskAssignments(task.id, selectedAssignees)
             if (!assignmentResult) {
               console.warn('⚠️ Task updated but assignment update failed')
               setError('Task updated but failed to update assignees. Please try again.')
               return
             }
-            console.log('✅ Task assignments updated successfully')
           }
           
           onOpenChange(false)
         } else {
-          console.error('❌ Task update failed')
           setError('Failed to update task. Please try again.')
         }
       } catch (error) {
-        console.error('❌ Error updating task:', error)
         setError(error instanceof Error ? error.message : 'An unexpected error occurred')
       }
     }
-
-    console.log('🔄 handleSubmit END')
   }
 
   const toggleAssignee = (memberId: string) => {
-    console.log('🔄 toggleAssignee called with:', memberId)
-    console.log('🔄 Current selectedAssignees:', selectedAssignees)
-    
     setSelectedAssignees((prev) => {
       const newAssignees = prev.includes(memberId) 
         ? prev.filter((id) => id !== memberId) 
@@ -296,7 +437,6 @@ export function TaskModal({ open, onOpenChange, task, mode = "create" }: TaskMod
       // Ensure no duplicates
       const uniqueAssignees = [...new Set(newAssignees)]
       
-      console.log('🔄 New selectedAssignees:', uniqueAssignees)
       return uniqueAssignees
     })
   }
@@ -427,7 +567,7 @@ export function TaskModal({ open, onOpenChange, task, mode = "create" }: TaskMod
                   <SubtaskList
                     subtasks={subtasks}
                     taskId={task?.id || 'temp-task-id'} // Pass task ID or temporary ID for new tasks
-                    onSubtasksChange={setSubtasks}
+                    onSubtasksChange={debugSetSubtasks}
                     onCommentClick={handleSubtaskCommentClick}
                     selectedCommentSubtask={null} // No longer needed
                     isTaskCreation={mode === "create"} // NEW: Pass creation mode flag
@@ -440,6 +580,8 @@ export function TaskModal({ open, onOpenChange, task, mode = "create" }: TaskMod
                     <CommentsSection
                       comments={comments}
                       onCommentsChange={setComments}
+                      taskId={task?.id || 'temp-task-id'}
+                      isTaskCreation={mode === "create"}
                       placeholder="Add a comment to this task..."
                     />
                   </div>
@@ -754,7 +896,7 @@ export function TaskModal({ open, onOpenChange, task, mode = "create" }: TaskMod
                 )}
               </div>
               <div className="flex gap-3">
-                <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="px-6 h-10">
+                <Button type="button" variant="outline" onClick={() => { setHasInitialized(false); setCommentsLoaded(false); onOpenChange(false) }} className="px-6 h-10">
                   Cancel
                 </Button>
                 <Button 
