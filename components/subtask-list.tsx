@@ -19,14 +19,19 @@ import { useTaskContext } from "@/contexts/task-context"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent } from "@/components/ui/card"
 import { useAuth } from "@/contexts/auth-context"
+import { SubtaskCommentsModal } from "@/components/subtask-comments-modal"
 
 interface SubtaskComment {
   id: string
-  text: string
-  author: string
+  author: {
+    id: string
+    name: string
+    initials: string
+    email?: string
+  }
+  content: string
   timestamp: Date
   editedAt?: Date
-  isEditing?: boolean
   uploadStatus?: 'uploading' | 'success' | 'failed'
   isTemporary?: boolean
 }
@@ -303,8 +308,13 @@ export function SubtaskList({
     // Create optimistic UI comment
     const tempComment: SubtaskComment = {
       id: `temp-comment-${Date.now()}`,
-      text: newCommentText.trim(),
-      author: (user as any)?.user_metadata?.full_name || user.email || 'Current User',
+      content: newCommentText.trim(),
+      author: {
+        id: user.id,
+        name: (user as any)?.user_metadata?.full_name || user.email || 'Current User',
+        initials: ((user as any)?.user_metadata?.full_name || user.email || 'U').split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2),
+        email: user.email
+      },
       timestamp: new Date(),
       uploadStatus: 'uploading',
       isTemporary: true
@@ -337,7 +347,7 @@ export function SubtaskList({
         // Save to database
         const commentData = {
           subtask_id: subtaskId,
-          content: tempComment.text,
+          content: tempComment.content,
           author_id: user.id,
           is_internal: false
         }
@@ -348,7 +358,7 @@ export function SubtaskList({
           // Replace temp comment with real one
           const realComment: SubtaskComment = {
             id: dbComment.id,
-            text: dbComment.content,
+            content: dbComment.content,
             author: tempComment.author,
             timestamp: new Date(dbComment.created_at),
             uploadStatus: 'success' as const
@@ -441,7 +451,7 @@ export function SubtaskList({
       // Retry save to database
       const commentData = {
         subtask_id: subtaskId,
-        content: comment.text,
+        content: comment.content,
         author_id: user?.id || '',
         is_internal: false
       }
@@ -452,7 +462,7 @@ export function SubtaskList({
         // Replace with real comment
         const realComment: SubtaskComment = {
           id: dbComment.id,
-          text: dbComment.content,
+          content: dbComment.content,
           author: comment.author,
           timestamp: new Date(dbComment.created_at),
           uploadStatus: 'success' as const
@@ -1074,175 +1084,25 @@ export function SubtaskList({
 
       {/* Subtask Comments Modal */}
       {commentModalOpen && (
-        <Dialog open={!!commentModalOpen} onOpenChange={(open) => !open && setCommentModalOpen(null)}>
-          <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] flex flex-col">
-            <DialogHeader>
-              <DialogTitle className="flex items-center justify-between">
-                <span className="truncate">Comments: {safeSubtasks.find(s => s.id === commentModalOpen)?.title}</span>
-              </DialogTitle>
-            </DialogHeader>
-            
-            <div className="flex-1 flex flex-col min-h-0">
-              {/* Comments List */}
-              <div className="flex-1 overflow-y-auto space-y-4 p-4 border rounded-lg bg-muted/20">
-                {(() => {
-                  const subtask = safeSubtasks.find(s => s.id === commentModalOpen)
-                  const comments = subtask?.comments || []
-                  
-                  if (comments.length === 0) {
-                    return (
-                      <div className="text-center py-8 text-muted-foreground">
-                        <MessageCircle className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                        <p className="text-sm">No comments yet. Be the first to comment!</p>
-                      </div>
-                    )
-                  }
-                  
-                  return comments.map((comment) => (
-                    <div key={comment.id} className="flex gap-3 p-3 bg-background rounded-lg border-[--border] min-w-0">
-                      <Avatar className="w-8 h-8 flex-shrink-0">
-                        <AvatarFallback className="text-xs bg-primary text-primary-foreground">
-                          {comment.author.split(' ').map(n => n[0]).join('')}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 min-w-0 overflow-hidden">
-                        <div className="flex items-center gap-2 mb-1 min-w-0">
-                          <span className="text-sm font-medium text-foreground truncate">{comment.author}</span>
-                          <span className="text-xs text-muted-foreground flex-shrink-0">
-                            {format(comment.timestamp, "MMM dd, yyyy 'at' h:mm a")}
-                            {comment.uploadStatus && (
-                              <span className="ml-1 text-xs text-muted-foreground/70">
-                                {getUploadStatusIcon(comment.uploadStatus)}
-                              </span>
-                            )}
-                            {comment.editedAt && (
-                              <span className="ml-1 text-xs text-muted-foreground/70">(edited)</span>
-                            )}
-                          </span>
-                        </div>
-                        
-                        {editingComment?.commentId === comment.id ? (
-                          <div className="space-y-2">
-                            <Textarea
-                              id={`edit-comment-${comment.id}`}
-                              name={`edit-comment-${comment.id}`}
-                              value={editingComment.text}
-                              onChange={(e) => setEditingComment(prev => prev ? { ...prev, text: e.target.value } : null)}
-                              className="text-sm min-h-[80px] resize-none"
-                              placeholder="Edit your comment..."
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-                                  e.preventDefault()
-                                  saveEditedComment(commentModalOpen!, comment.id)
-                                } else if (e.key === "Escape") {
-                                  e.preventDefault()
-                                  cancelEditingComment()
-                                }
-                              }}
-                            />
-                            <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                onClick={() => saveEditedComment(commentModalOpen!, comment.id)}
-                                className="h-7 px-2 text-xs bg-blue-600 hover:bg-blue-700"
-                              >
-                                Save
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={cancelEditingComment}
-                                className="h-7 px-2 text-xs"
-                              >
-                                Cancel
-                              </Button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="space-y-1">
-                            <p className="text-sm text-foreground break-words whitespace-pre-wrap overflow-hidden leading-relaxed">
-                              {comment.text}
-                            </p>
-                            {comment.text.length > 100 && (
-                              <p className="text-xs text-muted-foreground">
-                                {comment.text.length} characters
-                              </p>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                      
-                      <div className="flex gap-1 flex-shrink-0">
-                        {comment.uploadStatus === 'failed' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => retryComment(commentModalOpen!, comment.id)}
-                            className="h-5 w-5 p-0 text-red-500 hover:text-red-700"
-                            title="Retry upload"
-                          >
-                            <RotateCcw className="h-3 w-3" />
-                          </Button>
-                        )}
-                        {!editingComment && comment.uploadStatus !== 'uploading' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => startEditingComment(commentModalOpen!, comment.id, comment.text)}
-                            className="h-6 w-6 p-0 text-muted-foreground hover:text-blue-600"
-                            title="Edit comment"
-                          >
-                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                          </Button>
-                        )}
-                        {comment.uploadStatus !== 'uploading' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => deleteComment(commentModalOpen!, comment.id)}
-                            className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                            title="Delete comment"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                })()}
-              </div>
-              
-              {/* Add Comment Input */}
-              <div className="mt-4 space-y-2">
-                <div className="flex gap-2">
-                  <Input
-                    id="new-comment-text"
-                    name="new-comment-text"
-                    value={newCommentText}
-                    onChange={(e) => setNewCommentText(e.target.value)}
-                    onKeyDown={(e) => handleCommentKeyDown(e, commentModalOpen!)}
-                    placeholder={`Add a comment to "${safeSubtasks.find(s => s.id === commentModalOpen)?.title}"...`}
-                    className="flex-1"
-                  />
-                  <Button
-                    onClick={() => addComment(commentModalOpen!)}
-                    disabled={!newCommentText.trim()}
-                    size="sm"
-                    className="bg-blue-600 hover:bg-blue-700"
-                  >
-                    <Send className="h-4 w-4" />
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground text-center">
-                  Press Ctrl+Enter to send
-                </p>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <SubtaskCommentsModal
+          isOpen={!!commentModalOpen}
+          onClose={() => setCommentModalOpen(null)}
+          subtaskId={commentModalOpen}
+          subtaskTitle={safeSubtasks.find(s => s.id === commentModalOpen)?.title || 'Unknown Subtask'}
+          taskId={taskId}
+          comments={safeSubtasks.find(s => s.id === commentModalOpen)?.comments || []}
+          onCommentsChange={(newComments) => {
+            if (commentModalOpen) {
+              const updatedSubtasks = safeSubtasks.map(s => 
+                s.id === commentModalOpen ? { ...s, comments: newComments } : s
+              )
+              onSubtasksChange(updatedSubtasks)
+            }
+          }}
+          isTaskCreation={isTaskCreation}
+        />
       )}
+
     </div>
   )
 }
