@@ -43,7 +43,7 @@ interface TaskFormData {
 export function TaskModal({ open, onOpenChange, task, mode = "create" }: TaskModalProps) {
   console.log('🔄 TaskModal rendered with:', { open, mode, task })
   
-  const { addTask, createTaskWithAssignees, updateTask, deleteTask, fetchSubtasks } = useTaskContext()
+  const { addTask, createTaskWithAssignees, updateTask, deleteTask, fetchSubtasks, addSubtask } = useTaskContext()
   console.log('🔄 TaskModal useTaskContext result:', { addTask: !!addTask, updateTask: !!updateTask, deleteTask: !!deleteTask })
   
   const { teamMembers, loading: teamMembersLoading } = useTeamMembers()
@@ -74,7 +74,35 @@ export function TaskModal({ open, onOpenChange, task, mode = "create" }: TaskMod
     link: "",
   })
 
-  // Load current assignees when editing a task
+  // Function to reset all form state to defaults
+  const resetFormState = () => {
+    console.log('🔄 Resetting form state to defaults')
+    console.log('🔍 Current formData before reset:', formData)
+    console.log('🔍 Current subtasks before reset:', subtasks.length)
+    
+    setFormData({
+      title: "",
+      description: "",
+      status: "Todo",
+      priority: "Medium", 
+      startDate: undefined,
+      dueDate: undefined,
+      department: "",
+    })
+    setSubtasks([])
+    setComments([])
+    setAttachments([])
+    setSelectedAssignees([])
+    setAttachmentForm({
+      description: "",
+      link: "",
+    })
+    setError(null)
+    setAssigneeSearchTerm("")
+    console.log('✅ Form state reset complete - state updates queued')
+  }
+
+  // Load current assignees when editing a task OR reset when creating new task
   useEffect(() => {
     if (task && mode === "edit") {
       const assignees = task.assignees || []
@@ -93,6 +121,12 @@ export function TaskModal({ open, onOpenChange, task, mode = "create" }: TaskMod
         console.log('🔄 Loading comments from task:', task.comments.length, 'comments')
         setComments(task.comments)
       }
+    } else if (mode === "create") {
+      // Reset form when opening in create mode
+      console.log('🔄 Opening in create mode - resetting form')
+      console.log('🔍 Form data before reset:', formData)
+      resetFormState()
+      console.log('🔍 Form data after reset:', formData)
     }
   }, [task, mode])
 
@@ -148,7 +182,7 @@ export function TaskModal({ open, onOpenChange, task, mode = "create" }: TaskMod
       dueDate: formData.dueDate?.toISOString().split("T")[0],
       department: formData.department,
       assignees: uniqueAssignees,
-      subtasks,
+      subtasks: mode === "create" ? [] : subtasks, // NEW: Empty subtasks for creation mode
       comments,
       attachments,
       documentLinks, // Add processed document links for database
@@ -167,27 +201,54 @@ export function TaskModal({ open, onOpenChange, task, mode = "create" }: TaskMod
 
     if (mode === "create") {
       console.log('➕ Creating new task...')
-      console.log('🔄 About to call addTask with:', taskData)
-      console.log('🔄 addTask function type:', typeof addTask)
-      console.log('🔄 addTask function:', addTask)
+      console.log('🔄 About to call createTaskWithAssignees with:', taskData)
       
       try {
-        // Use the new function that properly handles multiple assignees
+        // Create task first (without subtasks)
         const result = await createTaskWithAssignees(taskData)
         console.log('🔄 createTaskWithAssignees call result:', result)
         
+        if (result && subtasks.length > 0) {
+          console.log('🔄 Task created, now creating subtasks...')
+          
+          // NEW: Create subtasks after task creation
+          const subtaskPromises = subtasks.map(async (subtask, index) => {
+            const subtaskData = {
+              task_id: result.id, // Real task ID now available
+              title: subtask.title,
+              order_index: index,
+              start_date: subtask.startDate ? subtask.startDate.toISOString().split('T')[0] : null,
+              end_date: subtask.endDate ? subtask.endDate.toISOString().split('T')[0] : null,
+              completed: subtask.completed || false,
+              created_by: null
+            }
+            
+            console.log('🔄 Creating subtask for new task:', subtaskData)
+            return await addSubtask(subtaskData)
+          })
+          
+          try {
+            await Promise.all(subtaskPromises)
+            console.log('✅ All subtasks created successfully')
+          } catch (subtaskError) {
+            console.error('❌ Error creating subtasks:', subtaskError)
+            // Task is created, but show warning about subtasks
+            setError('Task created but some subtasks failed to save. Please edit the task to add them.')
+          }
+        }
+        
         if (result) {
-          console.log('✅ Task created successfully with all assignees, closing modal')
+          console.log('✅ Task and subtasks created successfully')
+          resetFormState() // Reset form state before closing
           onOpenChange(false)
         } else {
           console.error('❌ Task creation failed')
           setError('Failed to create task. Please try again.')
-          // Keep modal open to show error
         }
+        
       } catch (error) {
-        console.error('❌ Error calling createTaskWithAssignees:', error)
+        console.error('❌ Error creating task:', error)
         setError(error instanceof Error ? error.message : 'An unexpected error occurred')
-        // Keep modal open to show error
       }
     } else if (mode === "edit" && task) {
       console.log('✏️ Updating existing task...')
@@ -369,6 +430,7 @@ export function TaskModal({ open, onOpenChange, task, mode = "create" }: TaskMod
                     onSubtasksChange={setSubtasks}
                     onCommentClick={handleSubtaskCommentClick}
                     selectedCommentSubtask={null} // No longer needed
+                    isTaskCreation={mode === "create"} // NEW: Pass creation mode flag
                   />
                 </div>
 

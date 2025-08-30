@@ -20,6 +20,8 @@ interface TaskContextType {
   fetchSubtasks: (taskId: string) => Promise<void>
   addSubtask: (subtaskData: any) => Promise<any>
   updateSubtask: (id: string, updates: any) => Promise<any>
+  getTempSubtasks: () => any[]
+  clearTempSubtasks: () => void
   setFilter: (filter: FilterType) => void
   setSearchQuery: (query: string) => void
   getFilteredTasks: () => Task[]
@@ -43,7 +45,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
     deleteTask: supabaseDeleteTask,
     getTasksByStatus,
     fetchSubtasks: supabaseFetchSubtasks,
-    addSubtask: supabaseAddSubtask,
+            addSubtask: supabaseAddSubtaskOriginal,
     updateSubtask: supabaseUpdateSubtask,
   } = useTasks()
   
@@ -56,6 +58,9 @@ export function TaskProvider({ children }: { children: ReactNode }) {
 
   const [filter, setFilter] = useState<FilterType>({ type: "all" })
   const [searchQuery, setSearchQuery] = useState<string>("")
+  
+  // State to track temporary subtasks during task creation
+  const [tempSubtasks, setTempSubtasks] = useState<any[]>([])
 
   // Wrapper functions to maintain the same interface
   const addTask = async (taskData: Omit<Task, "id">) => {
@@ -155,6 +160,35 @@ export function TaskProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  // Smart addSubtask wrapper that handles creation mode
+  const addSubtask = async (subtaskData: any) => {
+    console.log('🚨 TaskContext addSubtask called with:', subtaskData)
+    
+    // Check if we're in task creation mode (temp-task-id)
+    if (subtaskData.task_id === 'temp-task-id' || subtaskData.task_id?.startsWith('temp-')) {
+      console.log('🔄 CREATION MODE: Storing subtask in temporary state')
+      
+      // Generate temporary ID for UI
+      const tempSubtask = {
+        ...subtaskData,
+        id: `temp-subtask-${Date.now()}-${Math.random()}`,
+        completed: false
+      }
+      
+      // Store in temporary state
+      setTempSubtasks(prev => [...prev, tempSubtask])
+      
+      return tempSubtask
+    } else {
+      console.log('🔄 EDIT MODE: Saving subtask to database')
+      return await supabaseAddSubtaskOriginal(subtaskData)
+    }
+  }
+
+  // Function to get and clear temp subtasks (for task creation)
+  const getTempSubtasks = () => tempSubtasks
+  const clearTempSubtasks = () => setTempSubtasks([])
+
   const getFilteredTasks = () => {
     // Ensure tasks is always an array
     const safeTasks = tasks || []
@@ -195,8 +229,10 @@ export function TaskProvider({ children }: { children: ReactNode }) {
         deleteTask,
         getTasksByStatus,
         fetchSubtasks: supabaseFetchSubtasks,
-        addSubtask: supabaseAddSubtask,
+        addSubtask,
         updateSubtask,
+        getTempSubtasks,
+        clearTempSubtasks,
         setFilter,
         setSearchQuery,
         getFilteredTasks,

@@ -318,55 +318,15 @@ export function useTasks() {
         }
       }
       
-      // Now handle subtasks if they exist
-      if (uiTask.subtasks && uiTask.subtasks.length > 0) {
-        console.log('🔄 Creating subtasks for task:', uiTask.subtasks.length, 'subtasks')
-        
-        try {
-          const subtaskPromises = uiTask.subtasks.map(async (subtask, index) => {
-            const subtaskData: CreateSubtaskData = {
-              task_id: newTask.id,
-              title: subtask.title,
-              order_index: index,
-              start_date: subtask.startDate ? subtask.startDate.toISOString().split('T')[0] : null,
-              end_date: subtask.endDate ? subtask.endDate.toISOString().split('T')[0] : null,
-              completed: subtask.completed || false,
-              created_by: user.id
-            }
-            
-            console.log('🔄 Creating subtask:', subtaskData)
-            
-            const { data: newSubtask, error: subtaskError } = await supabase
-              .from('subtasks')
-              .insert(subtaskData)
-              .select()
-              .single()
-            
-            if (subtaskError) {
-              console.error('❌ Error creating subtask:', subtaskError)
-              throw subtaskError
-            }
-            
-            console.log('✅ Subtask created:', newSubtask)
-            return newSubtask
-          })
-          
-          await Promise.all(subtaskPromises)
-          console.log('✅ All subtasks created successfully')
-          
-        } catch (subtaskError) {
-          console.error('❌ Error creating subtasks:', subtaskError)
-          // Don't fail the entire operation, just log the error
-          console.warn('⚠️ Task created but subtask creation failed')
-        }
-      }
+      // REMOVED: Subtask creation logic (now handled in TaskModal)
+      // The subtasks will be created separately after task creation
       
       // Convert back to UI format and add to state
       const uiTaskData = convertSupabaseToUITask(newTask)
       // Note: Task will be added to state via real-time subscription to prevent duplicates
       // setTasks(prev => [uiTaskData, ...prev]) // Removed to prevent duplicates
       
-      console.log('✅ Task created successfully with assignees and subtasks')
+      console.log('✅ Task created successfully with assignees')
       return uiTaskData
       
     } catch (error) {
