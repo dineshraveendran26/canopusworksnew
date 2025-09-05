@@ -106,3 +106,8 @@ Thumbs.db
 # Test files
 testsprite_tests/tmp/
 testsprite_tests/test_results.json
+
+# Sensitive files
+.admin_temp_password
+.mcp-config.json
+.env.local
