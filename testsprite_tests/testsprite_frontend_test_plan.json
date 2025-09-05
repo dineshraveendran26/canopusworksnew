@@ -1,0 +1,611 @@
+[
+  {
+    "id": "TC001",
+    "title": "User Sign-Up with Valid Data",
+    "description": "Verify that a new user can successfully sign up with valid credentials using Supabase Auth.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the sign-up page."
+      },
+      {
+        "type": "action",
+        "description": "Input a valid email, password, and required user details."
+      },
+      {
+        "type": "action",
+        "description": "Submit the sign-up form."
+      },
+      {
+        "type": "assertion",
+        "description": "Check that the user receives a confirmation or welcome message."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify user is redirected to the authenticated area or told to verify email if applicable."
+      }
+    ]
+  },
+  {
+    "id": "TC002",
+    "title": "User Sign-Up with Existing Email",
+    "description": "Ensure the system prevents sign-up when using an email already registered and shows an appropriate error.",
+    "category": "error handling",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the sign-up page."
+      },
+      {
+        "type": "action",
+        "description": "Input an email already in the system with a password."
+      },
+      {
+        "type": "action",
+        "description": "Submit the sign-up form."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the system displays an error indicating email is already used."
+      }
+    ]
+  },
+  {
+    "id": "TC003",
+    "title": "User Sign-In with Correct Credentials",
+    "description": "Validate that a registered user can sign in successfully using correct credentials.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the sign-in page."
+      },
+      {
+        "type": "action",
+        "description": "Input valid email and password for a registered user."
+      },
+      {
+        "type": "action",
+        "description": "Click the sign-in button."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm the user is authenticated and redirected to the Kanban board dashboard."
+      }
+    ]
+  },
+  {
+    "id": "TC004",
+    "title": "User Sign-In with Incorrect Password",
+    "description": "Ensure that sign-in fails and an error is shown when the password is incorrect.",
+    "category": "error handling",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the sign-in page."
+      },
+      {
+        "type": "action",
+        "description": "Input valid email and incorrect password."
+      },
+      {
+        "type": "action",
+        "description": "Click the sign-in button."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify an appropriate error message is shown indicating incorrect credentials."
+      }
+    ]
+  },
+  {
+    "id": "TC005",
+    "title": "Password Reset Workflow",
+    "description": "Verify that a user can initiate a password reset and receive an email with a reset link.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the password reset page."
+      },
+      {
+        "type": "action",
+        "description": "Input a registered email."
+      },
+      {
+        "type": "action",
+        "description": "Submit the password reset request."
+      },
+      {
+        "type": "assertion",
+        "description": "Check that the system confirms the reset email was sent."
+      }
+    ]
+  },
+  {
+    "id": "TC006",
+    "title": "Role-Based Access Control Enforcement",
+    "description": "Verify the system enforces user role permissions on accessing department-specific views and actions.",
+    "category": "security",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Sign in as a user with a restricted role."
+      },
+      {
+        "type": "action",
+        "description": "Attempt to access data or functions reserved for higher privileged roles."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm access is denied and relevant UI elements or pages are inaccessible."
+      },
+      {
+        "type": "action",
+        "description": "Sign in as an admin or authorized role."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm full access to relevant features and data as per role."
+      }
+    ]
+  },
+  {
+    "id": "TC007",
+    "title": "Create New Task on Kanban Board",
+    "description": "Verify users can create a new task with mandatory fields on the Kanban board interface.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the Kanban board dashboard."
+      },
+      {
+        "type": "action",
+        "description": "Click the add new task button."
+      },
+      {
+        "type": "action",
+        "description": "Fill in task details including title, description, assignee, and status."
+      },
+      {
+        "type": "action",
+        "description": "Submit the new task form."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the task appears on the board in the correct status column."
+      }
+    ]
+  },
+  {
+    "id": "TC008",
+    "title": "Edit an Existing Task",
+    "description": "Ensure users can open an existing task and update its details successfully.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Select an existing task on the Kanban board."
+      },
+      {
+        "type": "action",
+        "description": "Open the task modal and modify fields such as title, description, status, and assignee."
+      },
+      {
+        "type": "action",
+        "description": "Save changes."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm the updated task details are reflected immediately on the board."
+      }
+    ]
+  },
+  {
+    "id": "TC009",
+    "title": "Drag and Drop Task Between Status Columns",
+    "description": "Verify that users can drag and drop a task to change its status and the updates are persisted.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Go to the Kanban board."
+      },
+      {
+        "type": "action",
+        "description": "Drag a task card from one status column to another."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the task's status updates accordingly in the backend and UI reflects the change immediately."
+      }
+    ]
+  },
+  {
+    "id": "TC010",
+    "title": "Create Subtask and Assign User",
+    "description": "Check that subtasks can be created under a task, assigned to team members, and tracked.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Open a task detail modal."
+      },
+      {
+        "type": "action",
+        "description": "Initiate creation of a new subtask."
+      },
+      {
+        "type": "action",
+        "description": "Input subtask title and assign a user."
+      },
+      {
+        "type": "action",
+        "description": "Submit the subtask for creation."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm the subtask appears under the parent task with correct assignment."
+      }
+    ]
+  },
+  {
+    "id": "TC011",
+    "title": "Mark Subtask as Completed",
+    "description": "Ensure users can mark subtasks as completed and completion status is displayed correctly.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to a task with subtasks."
+      },
+      {
+        "type": "action",
+        "description": "Mark a subtask as completed."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the UI updates the subtask as completed and the change is reflected in the database."
+      }
+    ]
+  },
+  {
+    "id": "TC012",
+    "title": "Real-Time Task Comments with User Mentions",
+    "description": "Test that multiple users can comment on tasks simultaneously, mention other users, and see real-time updates.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Open the comments section of a task."
+      },
+      {
+        "type": "action",
+        "description": "User A adds a comment mentioning User B."
+      },
+      {
+        "type": "assertion",
+        "description": "User B receives a notification and sees the comment in real-time."
+      },
+      {
+        "type": "action",
+        "description": "User B replies with a mention of User A."
+      },
+      {
+        "type": "assertion",
+        "description": "User A sees the reply instantly."
+      }
+    ]
+  },
+  {
+    "id": "TC013",
+    "title": "Notification System - User Approval Notification",
+    "description": "Verify notifications are correctly sent when a new user is pending approval and when approval status changes.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Register a new user pending approval."
+      },
+      {
+        "type": "assertion",
+        "description": "Admin receives a notification about pending user approval."
+      },
+      {
+        "type": "action",
+        "description": "Admin approves the user."
+      },
+      {
+        "type": "assertion",
+        "description": "User receives a notification confirming account approval."
+      }
+    ]
+  },
+  {
+    "id": "TC014",
+    "title": "Dashboard Analytics Load and Accuracy",
+    "description": "Verify the dashboard loads correctly showing task summaries, statistics, and progress tracking.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the dashboard page."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify all analytics data such as task counts, progress bars, and statistics render accurately."
+      }
+    ]
+  },
+  {
+    "id": "TC015",
+    "title": "File Upload for User Profile Photo",
+    "description": "Ensure that users can upload a profile photo and see it updated in their profile successfully.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to user profile settings."
+      },
+      {
+        "type": "action",
+        "description": "Select the option to upload a new profile photo."
+      },
+      {
+        "type": "action",
+        "description": "Upload a valid image file."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm the photo is uploaded, saved, and displayed in the user profile."
+      }
+    ]
+  },
+  {
+    "id": "TC016",
+    "title": "Dark/Light Theme Switching and Persistence",
+    "description": "Verify users can switch between dark and light themes, and that the choice persists between sessions and reflects system preferences.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to settings and toggle the theme mode."
+      },
+      {
+        "type": "assertion",
+        "description": "Check the UI theme changes immediately."
+      },
+      {
+        "type": "action",
+        "description": "Reload the application."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the selected theme persists after reload."
+      },
+      {
+        "type": "action",
+        "description": "Change system preference theme and reload app."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm app theme adjusts to system preference if no user override."
+      }
+    ]
+  },
+  {
+    "id": "TC017",
+    "title": "Responsive UI on Mobile Devices",
+    "description": "Verify the application UI adapts appropriately for mobile device screen sizes with navigation and Kanban board usability intact.",
+    "category": "ui",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Open the app on mobile devices or emulators of various sizes."
+      },
+      {
+        "type": "assertion",
+        "description": "Check that navigation, task cards, modals, and other UI elements display correctly and remain functional."
+      },
+      {
+        "type": "action",
+        "description": "Perform drag-and-drop, task creation, and comment actions on mobile UI."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify these interactions work smoothly without UI breakage or lag."
+      }
+    ]
+  },
+  {
+    "id": "TC018",
+    "title": "Error Boundary and Friendly Error Page Display",
+    "description": "Ensure that errors in the app are caught gracefully and the user is shown friendly error messages with recovery options.",
+    "category": "error handling",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Force an error in the app by navigating to an undefined route or causing a JavaScript error."
+      },
+      {
+        "type": "assertion",
+        "description": "Check that the app displays a custom error boundary with user-friendly messages."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify options are available to navigate back or retry."
+      }
+    ]
+  },
+  {
+    "id": "TC019",
+    "title": "Audit Trail Logging on Task Operations",
+    "description": "Validate that all task creation, modification, deletion, assignment, and status changes are logged for audit trail purposes.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Perform actions: create a task, edit task details, assign to a user, change status, and delete a task."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify that each action is recorded with timestamp, user performing action, and change details in audit logs."
+      }
+    ]
+  },
+  {
+    "id": "TC020",
+    "title": "Performance Testing of Drag-and-Drop on Kanban Board",
+    "description": "Test that drag-and-drop operations on the Kanban board work smoothly without lag or delayed updates even with many tasks.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Populate the Kanban board with a large number of tasks and subtasks."
+      },
+      {
+        "type": "action",
+        "description": "Perform multiple drag-and-drop movements of task cards across columns."
+      },
+      {
+        "type": "assertion",
+        "description": "Observe UI for responsiveness and backend for timely status updates without data loss."
+      }
+    ]
+  },
+  {
+    "id": "TC021",
+    "title": "Notification System Alert for System Admins",
+    "description": "Verify that system-related alerts and critical notifications are properly sent and displayed to admin users in real time.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Trigger system alert events such as failed user approvals or backend notifications."
+      },
+      {
+        "type": "assertion",
+        "description": "Check admins receive alerts immediately and notifications are displayed in UI."
+      }
+    ]
+  },
+  {
+    "id": "TC022",
+    "title": "Team Member Management - Add and Remove Members",
+    "description": "Ensure that admins can add new team members and remove existing members successfully with UI updates and backend changes.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Open team members management modal."
+      },
+      {
+        "type": "action",
+        "description": "Add a new member by email and assign role."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the new member appears in the list and can access resources according to role."
+      },
+      {
+        "type": "action",
+        "description": "Remove an existing member."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm the member is removed from the team and access is revoked."
+      }
+    ]
+  },
+  {
+    "id": "TC023",
+    "title": "API Route for Creating User Profile",
+    "description": "Validate the API endpoint for creating user profiles works correctly with valid and invalid data inputs.",
+    "category": "error handling",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Send a POST request with valid profile data to the create-user-profile endpoint."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the profile is created in the database and the API returns success status."
+      },
+      {
+        "type": "action",
+        "description": "Send a POST request with missing required fields or invalid data."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm the API returns validation errors with appropriate messages."
+      }
+    ]
+  },
+  {
+    "id": "TC024",
+    "title": "Public Landing Page Load and Navigation",
+    "description": "Verify that the public landing page loads correctly and users can navigate to sign-up and sign-in components smoothly.",
+    "category": "ui",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Access the public landing page."
+      },
+      {
+        "type": "assertion",
+        "description": "Check all UI elements such as buttons and links are rendered properly."
+      },
+      {
+        "type": "action",
+        "description": "Click on sign-up and sign-in buttons."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify navigation to respective forms."
+      }
+    ]
+  },
+  {
+    "id": "TC025",
+    "title": "Handling Not Found or Invalid Routes",
+    "description": "Check the application displays a user-friendly not-found page when navigating to an undefined route.",
+    "category": "error handling",
+    "priority": "Low",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Manually input a URL path that is not defined in the application."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm display of a custom 404 not-found page with options to navigate back to home."
+      }
+    ]
+  }
+]
