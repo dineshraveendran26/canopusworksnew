@@ -378,6 +378,22 @@ export function useTasks() {
       console.log('🚀 PERFORMANCE: Starting fast task fetch...')
       const startTime = Date.now()
 
+      // Emergency timeout - only clear if still loading after 15 seconds
+      const emergencyTimeout = setTimeout(() => {
+        console.warn('🚨 EMERGENCY: Forcing loading to false after 15 seconds')
+        setLoading(false)
+        // Don't clear tasks if they were already loaded - check current state
+        setTasks(currentTasks => {
+          if (currentTasks.length === 0) {
+            console.warn('🚨 EMERGENCY: No tasks loaded, setting empty array')
+            return []
+          } else {
+            console.warn('🚨 EMERGENCY: Tasks already loaded, keeping them')
+            return currentTasks
+          }
+        })
+      }, 15000)
+
       // STAGE 1: Fetch basic task data with essential joins only
       const { data, error: fetchError } = await supabase
         .from('tasks')
@@ -522,7 +538,7 @@ export function useTasks() {
             users!comments_author_id_fkey(id, email, full_name)
           `)
           .eq('task_id', taskId)
-          .order('order_index', { ascending: true }),
+          .order('created_at', { ascending: true }),
 
         // Task assignments with full team member data
         supabase
@@ -544,6 +560,7 @@ export function useTasks() {
       let subtaskComments: any[] = []
       if (subtasksResult.data && subtasksResult.data.length > 0) {
         const subtaskIds = subtasksResult.data.map((subtask: any) => subtask.id)
+        console.log('🔍 DEBUG: Fetching comments for subtask IDs:', subtaskIds)
         const { data: subtaskCommentsData, error: subtaskCommentsError } = await supabase
           .from('comments')
           .select(`
@@ -551,7 +568,13 @@ export function useTasks() {
             users!comments_author_id_fkey(id, email, full_name)
           `)
           .in('subtask_id', subtaskIds)
-          .order('order_index', { ascending: true })
+          .order('created_at', { ascending: true })
+        
+        console.log('🔍 DEBUG: Subtask comments query result:', {
+          data: subtaskCommentsData,
+          error: subtaskCommentsError,
+          count: subtaskCommentsData?.length || 0
+        })
         
         if (!subtaskCommentsError && subtaskCommentsData) {
           // Transform Supabase comment data to UI format

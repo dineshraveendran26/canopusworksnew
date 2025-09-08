@@ -16,13 +16,27 @@ function HomePageContent() {
   const [fullName, setFullName] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [message, setMessage] = useState("")
-  const { signIn, signUp, resetPassword, user, loading } = useAuth()
+  const { signIn, signUp, resetPassword, user, loading, setLoading, error, setError } = useAuth()
   const router = useRouter()
 
   // Debug: Log current auth state
   useEffect(() => {
     console.log('🔄 HomePage - Current auth state:', { user, loading })
   }, [user, loading])
+
+  // Emergency timeout for loading state
+  useEffect(() => {
+    if (loading) {
+      console.log('🔄 HomePage - Loading state detected, setting emergency timeout...')
+      const emergencyTimeout = setTimeout(() => {
+        console.warn('🚨 EMERGENCY: Page loading timeout after 10 seconds')
+        setLoading(false)
+        setError('Page loading timeout. Please refresh the page.')
+      }, 10000)
+      
+      return () => clearTimeout(emergencyTimeout)
+    }
+  }, [loading, setLoading, setError])
 
   // Monitor user state and redirect when authenticated
   useEffect(() => {
@@ -128,7 +142,41 @@ function HomePageContent() {
     setFullName("")
   }
 
-  // Show loading state while auth is initializing
+  // Add timeout to prevent infinite loading
+  useEffect(() => {
+    if (loading) {
+      const timeout = setTimeout(() => {
+        console.warn("⚠️ HomePage - Loading timeout, forcing page to load")
+        // Instead of reloading, just set loading to false
+        setLoading(false)
+      }, 8000) // Reduced from 12 to 8 seconds
+      
+      return () => clearTimeout(timeout)
+    }
+  }, [loading])  // Show loading state while auth is initializing
+
+  // Display authentication errors
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center p-4">
+        <div className="text-center space-y-4 bg-white p-8 rounded-lg shadow-xl">
+          <h2 className="text-2xl font-bold text-red-600">Authentication Error</h2>
+          <p className="text-gray-700">{error}</p>
+          <button 
+            onClick={() => {
+              // Reset error and retry authentication
+              setError(null)
+              setLoading(true)
+            }} 
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center p-4">

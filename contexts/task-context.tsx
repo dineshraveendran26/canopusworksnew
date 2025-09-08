@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useState, useMemo, type ReactNode } from "react"
+import { createContext, useContext, useState, useMemo, useEffect, type ReactNode } from "react"
 import { useTasks, type Task, type Subtask, type Comment } from "@/hooks/use-tasks"
 import { useAuth } from "@/contexts/auth-context"
 
@@ -63,6 +63,13 @@ export function TaskProvider({ children }: { children: ReactNode }) {
   
   // State to track temporary subtasks during task creation
   const [tempSubtasks, setTempSubtasks] = useState<any[]>([])
+  
+  // Task fetching is handled by useTasks hook with proper timeout logic
+  useEffect(() => {
+    if (user && !authLoading) {
+      console.log('🔄 TaskProvider: User authenticated, task fetching handled by useTasks hook')
+    }
+  }, [user, authLoading])
 
   // Wrapper functions to maintain the same interface
   const addTask = async (taskData: Omit<Task, "id">) => {

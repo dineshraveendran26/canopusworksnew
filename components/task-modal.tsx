@@ -4,6 +4,7 @@ import type React from "react"
 
 import { useState, useEffect, useCallback } from "react"
 import { useTaskContext } from "@/contexts/task-context"
+import { useSubtaskAssignments } from "@/hooks/use-subtask-assignments"
 import { useAuth } from "@/contexts/auth-context"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
@@ -47,6 +48,7 @@ export function TaskModal({ open, onOpenChange, task, mode = "create" }: TaskMod
   const { addTask, createTaskWithAssignees, updateTask, deleteTask, fetchTasks, fetchSubtasks, addSubtask, addComment, fetchTaskDetails } = useTaskContext()
   const { teamMembers, loading: teamMembersLoading } = useTeamMembers()
   const { updateTaskAssignments, loading: assignmentLoading } = useTaskAssignments()
+  const { assignTeamMembersToSubtask } = useSubtaskAssignments()
   const { user } = useAuth()
 
   // Permission checks
@@ -145,6 +147,12 @@ export function TaskModal({ open, onOpenChange, task, mode = "create" }: TaskMod
   const loadTaskComments = useCallback(async (taskId: string) => {
     try {
       console.log('🔄 Loading comments for task:', taskId)
+      
+      // Validate taskId before making the query
+      if (!taskId || taskId.trim() === '') {
+        console.warn('⚠️ Invalid taskId provided to loadTaskComments:', taskId)
+        return
+      }
       console.log('🔄 STACK TRACE:', new Error().stack)
       
       // Fetch comments for this specific task
@@ -408,7 +416,7 @@ export function TaskModal({ open, onOpenChange, task, mode = "create" }: TaskMod
       })() : undefined,
       department: formData.department,
       assignees: uniqueAssignees,
-      subtasks: mode === "create" ? [] : subtasks, // NEW: Empty subtasks for creation mode
+      subtasks: subtasks, // Include subtasks in both create and edit modes
       comments,
       attachments,
       documentLinks, // Add processed document links for database
@@ -467,26 +475,51 @@ export function TaskModal({ open, onOpenChange, task, mode = "create" }: TaskMod
             console.log('📋 TASK CREATION - All subtasks created:', createdSubtasks.length)
             console.log('📝 TASK CREATION - Created subtasks:', createdSubtasks)
             
-            // NEW: Save subtask comments after subtasks are created
+            // NEW: Save subtask assignees after subtasks are created
+            for (let i = 0; i < subtasks.length; i++) {
+              const originalSubtask = subtasks[i]
+              const createdSubtask = createdSubtasks[i]
+              
+              if (originalSubtask.assignees && originalSubtask.assignees.length > 0 && createdSubtask) {
+                console.log('🔄 TASK CREATION - Saving assignees for subtask:', createdSubtask.id, 'assignees:', originalSubtask.assignees)
+                
+                try {
+                  await assignTeamMembersToSubtask(createdSubtask.id, originalSubtask.assignees)
+                  console.log('✅ TASK CREATION - Assignees saved for subtask:', createdSubtask.id)
+                } catch (assigneeError) {
+                  console.error('❌ Error saving subtask assignees:', assigneeError)
+                }
+              }
+            }
+            
+                        // NEW: Save subtask comments after subtasks are created
             const subtaskCommentPromises = []
             for (let i = 0; i < subtasks.length; i++) {
               const originalSubtask = subtasks[i]
               const createdSubtask = createdSubtasks[i]
               
               if (originalSubtask.comments && originalSubtask.comments.length > 0 && createdSubtask) {
+                console.log('🔄 TASK CREATION - Saving comments for subtask:', createdSubtask.id, 'comments:', originalSubtask.comments.length)
                 
                 const commentPromises = originalSubtask.comments.map(async (comment: any) => {
+                  // Skip temporary comments that were already processed
+                  if (comment.isTemporary || comment.uploadStatus === 'uploading') {
+                    console.log('⏭️ Skipping temporary comment:', comment.id)
+                    return null
+                  }
+                  
                   const commentData = {
                     subtask_id: createdSubtask.id, // Real subtask ID now available
-                    content: comment.text || comment.content,
-                    author_id: comment.author?.id || comment.author, // Handle both structures
+                    content: comment.content || comment.text,
+                    author_id: comment.author?.id || comment.author?.id, // Handle both structures
                     is_internal: false
                   }
                   
+                  console.log('💾 Saving subtask comment:', commentData)
                   return await addComment(commentData)
                 })
                 
-                subtaskCommentPromises.push(...commentPromises)
+                subtaskCommentPromises.push(...commentPromises.filter(p => p !== null))
               }
             }
             
