@@ -1,0 +1,47 @@
+[
+  {
+    "id": "TC001",
+    "title": "create user profile with approval workflow",
+    "description": "Test the /api/create-user-profile POST endpoint to ensure it correctly creates a user profile with all required fields and triggers the administrator approval workflow with notifications."
+  },
+  {
+    "id": "TC002",
+    "title": "get all tasks for kanban board",
+    "description": "Test the /api/tasks GET endpoint to verify it returns all tasks correctly for the Kanban board display with real-time updates."
+  },
+  {
+    "id": "TC003",
+    "title": "create new task",
+    "description": "Test the /api/tasks POST endpoint to ensure new tasks can be created with valid data and are reflected on the Kanban board."
+  },
+  {
+    "id": "TC004",
+    "title": "approve or reject user registration",
+    "description": "Test the /api/approve-user POST endpoint to verify that administrators can approve or reject user registrations and that notifications are sent accordingly."
+  },
+  {
+    "id": "TC005",
+    "title": "assign users to tasks",
+    "description": "Test the /api/assign-task POST endpoint to ensure multiple users can be assigned to tasks including subtasks and team member management."
+  },
+  {
+    "id": "TC006",
+    "title": "get comments for task",
+    "description": "Test the /api/comments GET endpoint to verify it returns all comments related to a specific task in real-time."
+  },
+  {
+    "id": "TC007",
+    "title": "add comment to task",
+    "description": "Test the /api/comments POST endpoint to ensure users can add comments to tasks and subtasks and that comments are updated in real-time."
+  },
+  {
+    "id": "TC008",
+    "title": "get dashboard statistics",
+    "description": "Test the /api/dashboard GET endpoint to verify it returns accurate task statistics and user activity data for the dashboard."
+  },
+  {
+    "id": "TC009",
+    "title": "upload profile photo or file",
+    "description": "Test the /api/upload POST endpoint to ensure profile photos and file attachments can be uploaded successfully with proper file type validation."
+  }
+]

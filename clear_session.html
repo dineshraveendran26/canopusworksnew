@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Clear Session Data</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 10px; }
+        .button:hover { background: #0056b3; }
+        .result { margin: 10px 0; padding: 10px; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <h1>Clear Supabase Session Data</h1>
+    <p>This will clear any stale session data that might be causing authentication errors.</p>
+    
+    <button class="button" onclick="clearSessionData()">Clear Session Data</button>
+    <button class="button" onclick="checkSessionData()">Check Session Data</button>
+    
+    <div id="result"></div>
+    
+    <script>
+        function clearSessionData() {
+            const resultDiv = document.getElementById('result');
+            try {
+                // Clear localStorage
+                const keys = Object.keys(localStorage);
+                let clearedCount = 0;
+                
+                keys.forEach(key => {
+                    if (key.includes('supabase') || key.includes('sb-')) {
+                        localStorage.removeItem(key);
+                        clearedCount++;
+                    }
+                });
+                
+                // Clear sessionStorage
+                const sessionKeys = Object.keys(sessionStorage);
+                sessionKeys.forEach(key => {
+                    if (key.includes('supabase') || key.includes('sb-')) {
+                        sessionStorage.removeItem(key);
+                        clearedCount++;
+                    }
+                });
+                
+                resultDiv.innerHTML = `<div class="result success">✅ Cleared ${clearedCount} session items. Please refresh the page.</div>`;
+                
+                // Auto refresh after 2 seconds
+                setTimeout(() => {
+                    window.location.href = 'http://localhost:3001';
+                }, 2000);
+                
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="result error">❌ Error clearing session: ${error.message}</div>`;
+            }
+        }
+        
+        function checkSessionData() {
+            const resultDiv = document.getElementById('result');
+            try {
+                const localStorageKeys = Object.keys(localStorage).filter(key => 
+                    key.includes('supabase') || key.includes('sb-')
+                );
+                const sessionStorageKeys = Object.keys(sessionStorage).filter(key => 
+                    key.includes('supabase') || key.includes('sb-')
+                );
+                
+                let message = `<div class="result">`;
+                message += `<strong>LocalStorage:</strong> ${localStorageKeys.length} items<br>`;
+                message += `<strong>SessionStorage:</strong> ${sessionStorageKeys.length} items<br>`;
+                
+                if (localStorageKeys.length > 0) {
+                    message += `<strong>LocalStorage keys:</strong> ${localStorageKeys.join(', ')}<br>`;
+                }
+                if (sessionStorageKeys.length > 0) {
+                    message += `<strong>SessionStorage keys:</strong> ${sessionStorageKeys.join(', ')}<br>`;
+                }
+                
+                message += `</div>`;
+                resultDiv.innerHTML = message;
+                
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="result error">❌ Error checking session: ${error.message}</div>`;
+            }
+        }
+        
+        // Auto-check on page load
+        window.onload = checkSessionData;
+    </script>
+</body>
+</html>

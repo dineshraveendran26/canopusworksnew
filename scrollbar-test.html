@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scrollbar Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #1a1a1a;
+            color: white;
+            padding: 20px;
+        }
+        
+        .test-container {
+            width: 320px;
+            max-height: 256px;
+            border: 1px solid #333;
+            border-radius: 8px;
+            background: #2a2a2a;
+            padding: 16px;
+        }
+        
+        .test-header {
+            font-weight: bold;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #444;
+        }
+        
+        .test-search {
+            margin-bottom: 16px;
+        }
+        
+        .test-search input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #555;
+            border-radius: 4px;
+            background: #333;
+            color: white;
+        }
+        
+        /* Custom Scrollbar Styles */
+        .custom-scrollbar {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+            /* Ensure scrolling works */
+            overflow-y: auto !important;
+            /* Force scrollbar to always show for testing */
+            overflow-y: scroll !important;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+            border-radius: 4px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.4);
+            border-radius: 4px;
+            transition: background-color 0.2s ease;
+            border: 1px solid transparent;
+            background-clip: content-box;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.6);
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-corner {
+            background: transparent;
+        }
+        
+        .test-list {
+            max-height: 200px;
+            overflow-y: auto;
+            custom-scrollbar: true;
+        }
+        
+        .test-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px;
+            border-radius: 4px;
+            margin-bottom: 4px;
+            transition: background-color 0.2s;
+        }
+        
+        .test-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .test-avatar {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #4B0082;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+            color: white;
+        }
+        
+        .test-info {
+            flex: 1;
+        }
+        
+        .test-name {
+            font-weight: bold;
+            font-size: 14px;
+        }
+        
+        .test-role {
+            font-size: 12px;
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+    <h1>Custom Scrollbar Test</h1>
+    <p>This tests the custom scrollbar CSS that should be working in the app.</p>
+    
+    <div class="test-container">
+        <div class="test-header">Select Team Member</div>
+        
+        <div class="test-search">
+            <input type="text" placeholder="Search team members..." />
+        </div>
+        
+        <div class="test-list custom-scrollbar">
+            <div class="test-item">
+                <div class="test-avatar">M</div>
+                <div class="test-info">
+                    <div class="test-name">Milo</div>
+                    <div class="test-role">Welding</div>
+                </div>
+            </div>
+            
+            <div class="test-item">
+                <div class="test-avatar">BW</div>
+                <div class="test-info">
+                    <div class="test-name">Black Widow</div>
+                    <div class="test-role">Welding</div>
+                </div>
+            </div>
+            
+            <div class="test-item">
+                <div class="test-avatar">D</div>
+                <div class="test-info">
+                    <div class="test-name">Dora</div>
+                    <div class="test-role">Welding</div>
+                </div>
+            </div>
+            
+            <div class="test-item">
+                <div class="test-avatar">L</div>
+                <div class="test-info">
+                    <div class="test-name">Love</div>
+                    <div class="test-role">Welding</div>
+                </div>
+            </div>
+            
+            <div class="test-item">
+                <div class="test-avatar">D</div>
+                <div class="test-info">
+                    <div class="test-name">Dummy</div>
+                    <div class="test-role">dfasfsad</div>
+                </div>
+            </div>
+            
+            <div class="test-item">
+                <div class="test-avatar">IS</div>
+                <div class="test-info">
+                    <div class="test-name">Iron Man</div>
+                    <div class="test-role">Welding</div>
+                </div>
+            </div>
+            
+            <div class="test-item">
+                <div class="test-avatar">DS</div>
+                <div class="test-info">
+                    <div class="test-name">Dr Strange</div>
+                    <div class="test-role">Welding</div>
+                </div>
+            </div>
+            
+            <div class="test-item">
+                <div class="test-avatar">ST1</div>
+                <div class="test-info">
+                    <div class="test-name">Sample Team Member 1</div>
+                    <div class="test-role">Worker</div>
+                </div>
+            </div>
+            
+            <div class="test-item">
+                <div class="test-avatar">ST2</div>
+                <div class="test-info">
+                    <div class="test-name">Sample Team Member 2</div>
+                    <div class="test-role">Quality Control</div>
+                </div>
+            </div>
+            
+            <div class="test-item">
+                <div class="test-avatar">T1</div>
+                <div class="test-info">
+                    <div class="test-name">Test User 1</div>
+                    <div class="test-role">Developer</div>
+                </div>
+            </div>
+            
+            <div class="test-item">
+                <div class="test-avatar">T2</div>
+                <div class="test-info">
+                    <div class="test-name">Test User 2</div>
+                    <div class="test-role">Designer</div>
+                </div>
+            </div>
+            
+            <div class="test-item">
+                <div class="test-avatar">T3</div>
+                <div class="test-info">
+                    <div class="test-name">Test User 3</div>
+                    <div class="test-role">Manager</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <p style="margin-top: 20px; color: #aaa;">
+        If you can see a custom scrollbar and scroll through this list, the CSS is working correctly.
+        The scrollbar should be thin, elegant, and functional.
+    </p>
+</body>
+</html> 
